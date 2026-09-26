@@ -1,6 +1,6 @@
 # Native Swift notch app: research and implementation plan
 
-Prepared September 25, 2026. Status: research and planning complete; application implementation has not started.
+Prepared September 25, 2026. This is the original implementation plan. A working development build is now implemented; current coverage, remaining gaps and test evidence are tracked in [FEATURES.md](FEATURES.md) and [VALIDATION.md](VALIDATION.md). The original proposals below are retained for scope comparison.
 
 ## Scope and evidence
 

@@ -26,7 +26,7 @@ struct TrayItem: Identifiable, Codable {
     }
     func remove(_ ids: Set<UUID>) { items.removeAll { ids.contains($0.id) }; save() }
     func save() { do { try CrestPaths.save(JSONEncoder().encode(items), to: file) } catch { self.error = error.localizedDescription } }
-    func choose() { let panel = NSOpenPanel(); panel.canChooseDirectories = true; panel.allowsMultipleSelection = true; if panel.runModal() == .OK { add(panel.urls) } }
+    func choose() { NSApp.activate(ignoringOtherApps: true); let panel = NSOpenPanel(); panel.canChooseDirectories = true; panel.allowsMultipleSelection = true; if panel.runModal() == .OK { add(panel.urls) } }
     func copy(_ ids: Set<UUID>) { NSPasteboard.general.clearContents(); NSPasteboard.general.writeObjects(items.filter { ids.contains($0.id) && $0.exists }.map { $0.url as NSURL }) }
     func share(_ ids: Set<UUID>) { Sharing.airDrop(items.filter { ids.contains($0.id) && $0.exists }.map { $0.url }) }
 }
@@ -138,18 +138,29 @@ struct DownloadActivity: Identifiable {
     private var timer: Timer?
     private var folder: URL?
     private var screenshots = false
+    private var preferenceKey: String?
     private weak var tray: TrayService?
     func choose(tray: TrayService, screenshots: Bool) {
+        NSApp.activate(ignoringOtherApps: true)
         let picker = NSOpenPanel(); picker.canChooseFiles = false; picker.canChooseDirectories = true; picker.message = screenshots ? "Choose your screenshot folder. Only new screenshots will be added." : "Choose Downloads. Partial download sizes and speed will be shown."
         if picker.runModal() == .OK, let url = picker.url { start(url, tray: tray, screenshots: screenshots) }
     }
     func start(_ url: URL, tray: TrayService, screenshots: Bool) {
         stop(); self.tray = tray; folder = url; self.screenshots = screenshots
+        preferenceKey = screenshots ? "screenshotsBookmark" : "downloadsBookmark"
+        if let bookmark = try? url.bookmarkData(options: .minimalBookmark), let preferenceKey { UserDefaults.standard.set(bookmark, forKey: preferenceKey) }
         known = Set(((try? FileManager.default.contentsOfDirectory(atPath: url.path)) ?? []))
         status = "Watching \(url.lastPathComponent)"; scan()
         timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in Task { @MainActor in self?.scan() } }
     }
-    func stop() { timer?.invalidate(); timer = nil; folder = nil; downloads = []; snapshots = [:]; pending = []; status = "Folder watching off" }
+    func restore(tray: TrayService, screenshots: Bool) {
+        let key = screenshots ? "screenshotsBookmark" : "downloadsBookmark"
+        guard let data = UserDefaults.standard.data(forKey: key) else { return }
+        var stale = false
+        if let url = try? URL(resolvingBookmarkData: data, options: .withoutUI, bookmarkDataIsStale: &stale) { start(url, tray: tray, screenshots: screenshots) }
+        else { status = "Saved folder is unavailable. Choose it again." }
+    }
+    func stop() { timer?.invalidate(); timer = nil; folder = nil; downloads = []; snapshots = [:]; pending = []; status = "Folder watching off"; if let preferenceKey { UserDefaults.standard.removeObject(forKey: preferenceKey) }; preferenceKey = nil }
     private func scan() {
         guard let folder else { return }
         guard let urls = try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: [.fileSizeKey, .isRegularFileKey, .isSymbolicLinkKey], options: .skipsHiddenFiles) else { status = "Folder access unavailable. Choose the folder again."; return }
@@ -161,7 +172,7 @@ struct DownloadActivity: Identifiable {
             let values = try? url.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey, .isSymbolicLinkKey])
             guard values?.isSymbolicLink != true else { continue }
             let size = Int64(values?.fileSize ?? 0); let previous = snapshots[name]; next[name] = (size, now)
-            if temporary && !screenshots {
+            if temporary && !screenshots && values?.isRegularFile == true {
                 let speed = previous.map { max(0, Double(size - $0.0) / max(0.1, now.timeIntervalSince($0.1))) } ?? 0
                 active.append(DownloadActivity(path: name, bytes: size, bytesPerSecond: speed)); pending.insert(url.deletingPathExtension().lastPathComponent)
             } else if !known.contains(name), values?.isRegularFile == true {

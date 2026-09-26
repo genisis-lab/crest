@@ -108,6 +108,7 @@ import CrestCore
         try? input?.close(); input = nil
         if old?.isRunning == true { old?.terminate() }
         connected = false; buffer.removeAll(); pendingQuota.removeAll(); pendingThreads.removeAll()
+        sessions.removeAll { $0.provider == "Codex" }; status = "Codex disconnected."
     }
     func refresh() {
         guard connected else { return }
@@ -196,8 +197,13 @@ enum ClaudeSetup {
         var updated = HookConfiguration.merge(original, bridgePath: bridge.path)
         let ownCommand = HookConfiguration.quote(bridge.path) + " statusline"
         if includeStatus {
-            if let previous = original["statusLine"] as? [String: Any], previous["command"] as? String != ownCommand {
-                try CrestPaths.save(JSONSerialization.data(withJSONObject: previous), to: CrestPaths.root.appendingPathComponent("previous-statusline.json"))
+            if (original["statusLine"] as? [String: Any])?["command"] as? String != ownCommand {
+                let previousFile = CrestPaths.root.appendingPathComponent("previous-statusline.json")
+                if let previous = original["statusLine"] as? [String: Any] {
+                    try CrestPaths.save(JSONSerialization.data(withJSONObject: previous), to: previousFile)
+                } else if FileManager.default.fileExists(atPath: previousFile.path) {
+                    try FileManager.default.removeItem(at: previousFile)
+                }
             }
             updated["statusLine"] = ["type": "command", "command": ownCommand]
         }

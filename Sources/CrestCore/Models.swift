@@ -128,6 +128,17 @@ public enum ClipboardPolicy {
         return !passwordManagers.contains(where: lower.contains) && !exclusions.contains(where: { $0.lowercased() == lower })
     }
 }
+public struct HardwareKey {
+    public let code: Int
+    public let down: Bool
+    public let repeated: Bool
+    public init?(data1: Int) {
+        let code = (data1 >> 16) & 0xffff
+        let state = (data1 >> 8) & 0xff
+        guard [0, 1, 2, 3, 7].contains(code), state == 0x0a || state == 0x0b else { return nil }
+        self.code = code; self.down = state == 0x0a; self.repeated = (data1 & 1) != 0
+    }
+}
 public enum EncryptedArchive {
     public static func seal(_ data: Data, key: SymmetricKey) throws -> Data { try AES.GCM.seal(data, using: key).combined! }
     public static func open(_ data: Data, key: SymmetricKey) throws -> Data { try AES.GCM.open(AES.GCM.SealedBox(combined: data), using: key) }

@@ -11,7 +11,3 @@ jobs:
         run: bash scripts/test.sh
       - name: Bundle and verify local build
         run: bash scripts/build.sh
-      - uses: actions/upload-artifact@v4
-        with:
-          name: Crest-development-build
-          path: dist/Crest.zip

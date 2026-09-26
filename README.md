@@ -36,6 +36,8 @@ The interface contains Overview, Agents, Tray and Clipboard. Native Settings inc
 
 Clipboard recording, calendar access, media automation, Bluetooth monitoring and folder watching start off. Enable each in Settings when needed. Clipboard history is AES-GCM encrypted; its random key is held in the macOS Keychain. Known password managers, concealed clipboard types, unknown source apps and configured exclusions are filtered before persistence. This is not a universal secret detector; text copied from ordinary apps can still contain secrets.
 
+Calendar connections and selected watched folders are restored after restart only after opt-in. Experimental hardware-key HUD replacement requires Accessibility permission and explicit enablement each launch; unsupported controls keep the system overlay.
+
 Local application data is stored in `~/Library/Application Support/Crest`, outside this repository. File-tray metadata uses local bookmarks. Temporary agent events contain provider/session identity, project basename, terminal-routing fields and quota snapshots, not prompts or tool arguments. No Crest analytics or proprietary backend is included. Codex's own configuration still governs its subprocess behavior.
 
 ## Coverage and limitations

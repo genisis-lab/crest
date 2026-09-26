@@ -18,18 +18,20 @@ struct NotchView: View {
                 Image(systemName: model.agents.sessions.contains(where: { $0.state == "Needs you" }) ? "sparkle" : "mountain.2.fill")
                     .foregroundStyle(model.agents.sessions.contains(where: { $0.state == "Needs you" }) ? Color.pink : coral)
                 Spacer(minLength: 180)
-                if model.media.playing { Image(systemName: "waveform").foregroundStyle(lilac) }
+                if model.media.playing { Image(systemName: "waveform").foregroundStyle(lilac).symbolEffect(.variableColor.iterative, options: .repeating, isActive: !reduceMotion).accessibilityLabel("Playing") }
                 else if let percent = model.power.percent { Text("\(percent)%").font(.system(size: 10, weight: .medium, design: .rounded)).foregroundStyle(.white.opacity(0.65)) }
             }
             .padding(.horizontal, 19).frame(height: model.notchHeight)
             .contentShape(Rectangle()).onTapGesture { model.expanded.toggle() }
+            .accessibilityElement(children: .ignore).accessibilityLabel(model.expanded ? "Collapse Crest" : "Open Crest")
+            .accessibilityAddTraits(.isButton).accessibilityAction { model.expanded.toggle() }
             if model.expanded {
                 if model.onboarding { welcome }
                 else {
                     HStack(alignment: .center) {
                         VStack(alignment: .leading, spacing: 3) {
                             Text("Crest").font(.system(size: 25, weight: .semibold, design: .rounded))
-                            Text("A little more from your Mac.").font(.system(size: 11)).foregroundStyle(.secondary)
+                            Text("A little more from your Mac.").font(.system(size: 11)).foregroundStyle(.white.opacity(0.7))
                         }
                         Spacer()
                         Button { model.pinned.toggle() } label: { Image(systemName: model.pinned ? "pin.fill" : "pin") }.help("Keep Crest open").tint(model.pinned ? coral : .gray)
@@ -56,7 +58,7 @@ struct NotchView: View {
                         Text(model.notice ?? "Private by default · On your Mac").lineLimit(1)
                         Spacer()
                         Text("0.1").foregroundStyle(.white.opacity(0.3))
-                    }.font(.system(size: 10)).foregroundStyle(.secondary).padding(.horizontal, 23).padding(.bottom, 15)
+                    }.font(.system(size: 10)).foregroundStyle(.white.opacity(0.7)).padding(.horizontal, 23).padding(.bottom, 15)
                 }
             } else if let notice = model.notice {
                 Text(notice).font(.system(size: 12, weight: .medium)).foregroundStyle(coral).padding(.bottom, 12).lineLimit(1)
@@ -89,7 +91,7 @@ struct NotchView: View {
         VStack(alignment: .leading, spacing: 22) {
             Image(systemName: "mountain.2.fill").font(.system(size: 34)).foregroundStyle(coral)
             Text("Meet your new\npoint of focus.").font(.system(size: 32, weight: .semibold, design: .rounded))
-            Text("Agent alerts, useful little controls, and a place for the things you're working with. Right here, above it all.").font(.system(size: 14)).foregroundStyle(.secondary).lineSpacing(4)
+            Text("Agent alerts, useful little controls, and a place for the things you're working with. Right here, above it all.").font(.system(size: 14)).foregroundStyle(.white.opacity(0.7)).lineSpacing(4)
             VStack(alignment: .leading, spacing: 12) {
                 Label("Hover to open. Move away to tuck it back.", systemImage: "cursorarrow")
                 Label("Drop files here to keep them within reach.", systemImage: "tray")
@@ -97,9 +99,9 @@ struct NotchView: View {
             }.font(.system(size: 12)).foregroundStyle(.white.opacity(0.75))
             HStack {
                 Button("Make yourself at home") { model.finishOnboarding() }.buttonStyle(.borderedProminent).tint(coral).foregroundStyle(.black)
-                Button("Set up integrations") { model.finishOnboarding(); model.showSettings?() }.buttonStyle(.plain).foregroundStyle(.secondary)
+                Button("Set up integrations") { model.finishOnboarding(); model.showSettings?() }.buttonStyle(.plain).foregroundStyle(.white.opacity(0.7))
             }
-            Text("Clipboard and calendars stay off until you enable them.").font(.system(size: 10)).foregroundStyle(.secondary)
+            Text("Clipboard and calendars stay off until you enable them.").font(.system(size: 10)).foregroundStyle(.white.opacity(0.7))
         }.padding(28).frame(maxHeight: .infinity, alignment: .top)
     }
 }
@@ -111,7 +113,7 @@ struct Card<Content: View>: View {
 }
 struct EmptyCard: View {
     var icon: String; var title: String; var detail: String
-    var body: some View { VStack(spacing: 10) { Image(systemName: icon).font(.system(size: 26)).foregroundStyle(coral); Text(title).font(.system(size: 14, weight: .medium)); Text(detail).font(.system(size: 12)).foregroundStyle(.secondary).multilineTextAlignment(.center) }.padding(20).frame(maxWidth: .infinity) }
+    var body: some View { VStack(spacing: 10) { Image(systemName: icon).font(.system(size: 26)).foregroundStyle(coral); Text(title).font(.system(size: 14, weight: .medium)); Text(detail).font(.system(size: 12)).foregroundStyle(.white.opacity(0.7)).multilineTextAlignment(.center) }.padding(20).frame(maxWidth: .infinity) }
 }
 
 struct OverviewView: View {
@@ -120,7 +122,7 @@ struct OverviewView: View {
         VStack(spacing: 12) {
             if let waiting = model.agents.sessions.first(where: { $0.state == "Needs you" }) {
                 Button { model.agents.reveal(waiting) } label: {
-                    Card { HStack { Image(systemName: "sparkles").foregroundStyle(.pink); VStack(alignment: .leading) { Text("\(waiting.provider) needs you").fontWeight(.semibold); Text(waiting.project).font(.caption).foregroundStyle(.secondary) }; Spacer(); Image(systemName: "arrow.up.right") } }
+                    Card { HStack { Image(systemName: "sparkles").foregroundStyle(.pink); VStack(alignment: .leading) { Text("\(waiting.provider) needs you").fontWeight(.semibold); Text(waiting.project).font(.caption).foregroundStyle(.white.opacity(0.7)) }; Spacer(); Image(systemName: "arrow.up.right") } }
                 }.buttonStyle(.plain)
             }
             HStack(alignment: .top, spacing: 12) {
@@ -130,7 +132,7 @@ struct OverviewView: View {
             Card {
                 HStack(spacing: 13) {
                     Group { if let art = model.media.artwork { Image(nsImage: art).resizable().scaledToFill() } else { Image(systemName: "music.note").font(.title2).foregroundStyle(lilac) } }.frame(width: 46, height: 46).background(lilac.opacity(0.10)).clipShape(RoundedRectangle(cornerRadius: 10))
-                    VStack(alignment: .leading, spacing: 4) { Text(model.media.title).font(.system(size: 13, weight: .medium)).lineLimit(1); Text(model.media.artist).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1) }
+                    VStack(alignment: .leading, spacing: 4) { Text(model.media.title).font(.system(size: 13, weight: .medium)).lineLimit(1); Text(model.media.artist).font(.system(size: 11)).foregroundStyle(.white.opacity(0.7)).lineLimit(1) }
                     Spacer(minLength: 0)
                     Button { model.media.control("previous") } label: { Image(systemName: "backward.end.fill") }.help("Previous")
                     Button { model.media.control("toggle") } label: { Image(systemName: model.media.playing ? "pause.fill" : "play.fill") }.help("Play or pause")
@@ -139,16 +141,16 @@ struct OverviewView: View {
             }
             Card {
                 VStack(spacing: 11) {
-                    HStack { Image(systemName: model.power.charging ? "battery.100percent.bolt" : "battery.75percent").foregroundStyle(.green); Text(model.power.percent.map { "\($0)%" } ?? "No battery"); Spacer(); Text(model.power.time).foregroundStyle(.secondary) }.font(.system(size: 11))
+                    HStack { Image(systemName: model.power.charging ? "battery.100percent.bolt" : "battery.75percent").foregroundStyle(.green); Text(model.power.percent.map { "\($0)%" } ?? "No battery"); Spacer(); Text(model.power.time).foregroundStyle(.white.opacity(0.7)) }.font(.system(size: 11))
                     HStack { Button { model.audio.toggleMute() } label: { Image(systemName: model.audio.muted ? "speaker.slash" : "speaker.wave.2") }.buttonStyle(.plain).help("Mute"); Slider(value: Binding(get: { Double(model.audio.volume) }, set: { model.audio.set(Float($0)) })).tint(coral).disabled(!model.audio.available).accessibilityLabel("Volume"); Text("\(Int((model.audio.volume * 100).rounded()))%").monospacedDigit().font(.caption).frame(width: 32) }
                     if model.brightness.available { HStack { Image(systemName: "sun.max"); Slider(value: Binding(get: { Double(model.brightness.value) }, set: { model.brightness.set(Float($0)) })).tint(lilac).accessibilityLabel("Brightness") } }
                 }
             }
             if let meeting = model.calendar.meetings.first { MeetingRow(meeting: meeting) }
             ForEach(model.downloads.downloads) { item in
-                Card { VStack(alignment: .leading, spacing: 5) { Label(item.path, systemImage: "arrow.down.circle").lineLimit(1); Text("\(ByteCountFormatter.string(fromByteCount: item.bytes, countStyle: .file)) received · \(ByteCountFormatter.string(fromByteCount: Int64(item.bytesPerSecond), countStyle: .file))/s").font(.caption).foregroundStyle(.secondary); Text("Total size unavailable").font(.caption2).foregroundStyle(.secondary) } }
+                Card { VStack(alignment: .leading, spacing: 5) { Label(item.path, systemImage: "arrow.down.circle").lineLimit(1); Text("\(ByteCountFormatter.string(fromByteCount: item.bytes, countStyle: .file)) received · \(ByteCountFormatter.string(fromByteCount: Int64(item.bytesPerSecond), countStyle: .file))/s").font(.caption).foregroundStyle(.white.opacity(0.7)); Text("Total size unavailable").font(.caption2).foregroundStyle(.white.opacity(0.7)) } }
             }
-            ForEach(model.bluetooth.devices) { device in Card { VStack(alignment: .leading, spacing: 5) { Label(device.name, systemImage: "airpodspro"); Text(device.readings.isEmpty ? "Connected · Battery readings unavailable" : device.readings.joined(separator: " · ")).font(.caption).foregroundStyle(.secondary) } } }
+            ForEach(model.bluetooth.devices) { device in Card { VStack(alignment: .leading, spacing: 5) { Label(device.name, systemImage: "airpodspro"); Text(device.readings.isEmpty ? "Connected · Battery readings unavailable" : device.readings.joined(separator: " · ")).font(.caption).foregroundStyle(.white.opacity(0.7)) } } }
         }
     }
 }
@@ -162,15 +164,15 @@ struct QuotaCard: View {
                 if let snapshot, !snapshot.windows.isEmpty {
                     ForEach(compact ? Array(snapshot.windows.prefix(2)) : snapshot.windows) { window in
                         VStack(alignment: .leading, spacing: 5) {
-                            HStack(alignment: .firstTextBaseline) { Text("\(Int(window.remaining.rounded()))%").font(.system(size: compact ? 23 : 25, weight: .medium, design: .rounded)); Text("left").font(.caption).foregroundStyle(.secondary); Spacer() }
+                            HStack(alignment: .firstTextBaseline) { Text("\(Int(window.remaining.rounded()))%").font(.system(size: compact ? 23 : 25, weight: .medium, design: .rounded)); Text("left").font(.caption).foregroundStyle(.white.opacity(0.7)); Spacer() }
                             ProgressView(value: window.remaining, total: 100).tint(accent).accessibilityLabel("\(window.label), \(Int(window.used)) percent used")
-                            HStack { Text(window.label); Spacer(); if let reset = window.reset { Text(reset, style: .time).help(reset.formatted()) } }.font(.system(size: 10)).foregroundStyle(.secondary)
+                            HStack { Text(window.label); Spacer(); if let reset = window.reset { Text(reset, style: .time).help(reset.formatted()) } }.font(.system(size: 10)).foregroundStyle(.white.opacity(0.7))
                         }
                     }
-                    if !compact { HStack { Text(snapshot.plan ?? "Provider quota"); Spacer(); Text("Updated \(snapshot.receivedAt.formatted(date: .omitted, time: .shortened))") }.font(.caption2).foregroundStyle(.secondary) }
+                    if !compact { HStack { Text(snapshot.plan ?? "Provider quota"); Spacer(); Text("Updated \(snapshot.receivedAt.formatted(date: .omitted, time: .shortened))") }.font(.caption2).foregroundStyle(.white.opacity(0.7)) }
                 } else {
                     Text("—").font(.system(size: 29, weight: .light)).foregroundStyle(accent.opacity(0.5))
-                    Text(snapshot == nil ? "Not connected" : "Quota unavailable").font(.system(size: 11)).foregroundStyle(.secondary)
+                    Text(snapshot == nil ? "Not connected" : "Quota unavailable").font(.system(size: 11)).foregroundStyle(.white.opacity(0.7))
                 }
             }
         }
@@ -182,15 +184,15 @@ struct AgentsView: View {
     var settings: () -> Void
     var body: some View {
         VStack(alignment: .leading, spacing: 13) {
-            HStack { Text("YOUR USAGE").font(.system(size: 10, weight: .semibold)).tracking(1.5).foregroundStyle(.secondary); Spacer(); Button("Refresh") { service.refresh() }.disabled(!service.connected); Button("Connect…", action: settings) }.font(.caption)
+            HStack { Text("YOUR USAGE").font(.system(size: 10, weight: .semibold)).tracking(1.5).foregroundStyle(.white.opacity(0.7)); Spacer(); Button("Refresh") { service.refresh() }.disabled(!service.connected); Button("Connect…", action: settings) }.font(.caption)
             QuotaCard(name: "Claude", snapshot: service.claude, accent: coral)
             QuotaCard(name: "Codex", snapshot: service.codex, accent: lilac)
-            Text(service.status).font(.caption).foregroundStyle(.secondary)
-            Text("SESSIONS").font(.system(size: 10, weight: .semibold)).tracking(1.5).foregroundStyle(.secondary).padding(.top, 8)
+            Text(service.status).font(.caption).foregroundStyle(.white.opacity(0.7))
+            Text("SESSIONS").font(.system(size: 10, weight: .semibold)).tracking(1.5).foregroundStyle(.white.opacity(0.7)).padding(.top, 8)
             if service.sessions.isEmpty { EmptyCard(icon: "sparkles", title: "Ready when you are", detail: "Connect Claude hooks or a shared Codex server to receive session activity.") }
             ForEach(service.sessions) { session in
                 Button { service.reveal(session) } label: {
-                    Card { HStack { Circle().fill(session.state == "Needs you" ? .pink : .green).frame(width: 6, height: 6); VStack(alignment: .leading, spacing: 3) { Text(session.project).font(.system(size: 13, weight: .medium)); Text("\(session.provider) · \(session.state)").font(.caption).foregroundStyle(.secondary) }; Spacer(); Text(session.timestamp, style: .relative).font(.caption2).foregroundStyle(.secondary); Image(systemName: "arrow.up.right") } }
+                    Card { HStack { Circle().fill(session.state == "Needs you" ? .pink : .green).frame(width: 6, height: 6); VStack(alignment: .leading, spacing: 3) { Text(session.project).font(.system(size: 13, weight: .medium)); Text("\(session.provider) · \(session.state)").font(.caption).foregroundStyle(.white.opacity(0.7)) }; Spacer(); Text(session.timestamp, style: .relative).font(.caption2).foregroundStyle(.white.opacity(0.7)); Image(systemName: "arrow.up.right") } }
                 }.buttonStyle(.plain)
             }
         }
@@ -202,16 +204,15 @@ struct TrayView: View {
     @State private var selected = Set<UUID>()
     var body: some View {
         VStack(spacing: 12) {
-            HStack { Text("\(service.items.count) files").foregroundStyle(.secondary); Spacer(); Button("Add…") { service.choose() }; Button(selected.count == service.items.count ? "Deselect" : "Select all") { selected = selected.count == service.items.count ? [] : Set(service.items.map(\.id)) } }.font(.caption)
+            HStack { Text("\(service.items.count) \(service.items.count == 1 ? "file" : "files")").foregroundStyle(.white.opacity(0.7)); Spacer(); Button("Add…") { service.choose() }; Button(!selected.isEmpty && selected.count == service.items.count ? "Deselect" : "Select all") { selected = selected.count == service.items.count ? [] : Set(service.items.map(\.id)) } }.font(.caption)
             if service.items.isEmpty { EmptyCard(icon: "tray.and.arrow.down", title: "A place to put it", detail: "Drop files on the notch. Drag them back out, copy them, or send with AirDrop. Originals stay where they are.") }
             ForEach(service.items) { item in
                 HStack(spacing: 12) {
-                    Image(systemName: selected.contains(item.id) ? "checkmark.circle.fill" : "circle").foregroundStyle(selected.contains(item.id) ? coral : .gray)
+                    Toggle("Select \(item.url.lastPathComponent)", isOn: Binding(get: { selected.contains(item.id) }, set: { if $0 { selected.insert(item.id) } else { selected.remove(item.id) } })).toggleStyle(.checkbox).labelsHidden()
                     Image(nsImage: NSWorkspace.shared.icon(forFile: item.url.path)).resizable().frame(width: 32, height: 32)
-                    VStack(alignment: .leading, spacing: 3) { Text(item.url.lastPathComponent).font(.system(size: 12, weight: .medium)).lineLimit(1); Text(item.exists ? item.url.deletingLastPathComponent().lastPathComponent : "File moved or unavailable").font(.caption2).foregroundStyle(.secondary) }
+                    VStack(alignment: .leading, spacing: 3) { Text(item.url.lastPathComponent).font(.system(size: 12, weight: .medium)).lineLimit(1); Text(item.exists ? item.url.deletingLastPathComponent().lastPathComponent : "File moved or unavailable").font(.caption2).foregroundStyle(.white.opacity(0.7)) }
                     Spacer(); Button { NSWorkspace.shared.activateFileViewerSelecting([item.url]) } label: { Image(systemName: "arrow.up.right") }.buttonStyle(.plain).help("Reveal in Finder").disabled(!item.exists)
                 }.padding(11).background(selected.contains(item.id) ? coral.opacity(0.09) : .white.opacity(0.04), in: RoundedRectangle(cornerRadius: 11))
-                .contentShape(Rectangle()).onTapGesture { if selected.contains(item.id) { selected.remove(item.id) } else { selected.insert(item.id) } }
                 .onDrag { NSItemProvider(contentsOf: item.url) ?? NSItemProvider() }
             }
             if !selected.isEmpty { HStack { Button("Copy") { service.copy(selected) }; Button("AirDrop") { service.share(selected) }; Spacer(); Button("Remove from tray") { service.remove(selected); selected = [] } }.font(.caption) }
@@ -231,16 +232,15 @@ struct ClipboardView: View {
             if !service.enabled { EmptyCard(icon: "lock.shield", title: "Your clipboard, your choice", detail: service.error ?? "Enable encrypted history in Settings. Password managers and concealed clipboard items are excluded."); Button("Clipboard settings", action: settings) }
             else {
                 TextField("Search clipboard", text: $search).textFieldStyle(.roundedBorder)
-                HStack { Text("\(service.items.count) saved · encrypted").foregroundStyle(.secondary); Spacer(); Button("Select all") { selected = Set(filtered.map(\.id)) }; if !selected.isEmpty { Button("Deselect") { selected = [] } } }.font(.caption)
+                HStack { Text("\(service.items.count) saved · encrypted").foregroundStyle(.white.opacity(0.7)); Spacer(); Button("Select all") { selected = Set(filtered.map(\.id)) }; if !selected.isEmpty { Button("Deselect") { selected = [] } } }.font(.caption)
                 ForEach(filtered) { item in
                     HStack(spacing: 10) {
-                        Image(systemName: selected.contains(item.id) ? "checkmark.circle.fill" : "circle").foregroundStyle(selected.contains(item.id) ? coral : .gray)
+                        Toggle("Select clipboard item", isOn: Binding(get: { selected.contains(item.id) }, set: { if $0 { selected.insert(item.id) } else { selected.remove(item.id) } })).toggleStyle(.checkbox).labelsHidden()
                         if let data = item.image, let image = NSImage(data: data) { Image(nsImage: image).resizable().scaledToFit().frame(width: 50, height: 45) }
-                        VStack(alignment: .leading, spacing: 4) { Text(item.text ?? "Image").font(.system(size: 12)).lineLimit(3); Text(item.created, style: .relative).font(.caption2).foregroundStyle(.secondary) }
+                        VStack(alignment: .leading, spacing: 4) { Text(item.text ?? "Image").font(.system(size: 12)).lineLimit(3); Text(item.created, style: .relative).font(.caption2).foregroundStyle(.white.opacity(0.7)) }
                         Spacer(minLength: 0)
                         Button { service.pin(item.id) } label: { Image(systemName: item.pinned ? "pin.fill" : "pin").foregroundStyle(item.pinned ? coral : .gray) }.buttonStyle(.plain).help(item.pinned ? "Unpin" : "Pin")
                     }.padding(12).background(selected.contains(item.id) ? coral.opacity(0.09) : .white.opacity(0.04), in: RoundedRectangle(cornerRadius: 11))
-                    .contentShape(Rectangle()).onTapGesture { if selected.contains(item.id) { selected.remove(item.id) } else { selected.insert(item.id) } }
                     .onDrag { if let data = item.image, let image = NSImage(data: data) { return NSItemProvider(object: image) }; return NSItemProvider(object: (item.text ?? "") as NSString) }
                 }
                 if service.items.isEmpty { EmptyCard(icon: "doc.on.clipboard", title: "Nothing saved yet", detail: "Copy something in another app to start your history.") }
@@ -254,7 +254,7 @@ struct ClipboardView: View {
 struct MeetingRow: View {
     var meeting: Meeting
     var body: some View {
-        Card { HStack { Image(systemName: "calendar").foregroundStyle(lilac); VStack(alignment: .leading, spacing: 4) { Text(meeting.title).font(.system(size: 13, weight: .medium)).lineLimit(1); TimelineView(.periodic(from: .now, by: 30)) { context in Text(meeting.start > context.date ? "Starts in \(max(1, Int(meeting.start.timeIntervalSince(context.date) / 60))) min" : "In progress").font(.caption).foregroundStyle(.secondary) } }; Spacer(); if let url = meeting.link { Link("Join", destination: url).buttonStyle(.bordered) } } }
+        Card { HStack { Image(systemName: "calendar").foregroundStyle(lilac); VStack(alignment: .leading, spacing: 4) { Text(meeting.title).font(.system(size: 13, weight: .medium)).lineLimit(1); TimelineView(.periodic(from: .now, by: 30)) { context in Text(meeting.start > context.date ? "Starts in \(max(1, Int(meeting.start.timeIntervalSince(context.date) / 60))) min" : "In progress").font(.caption).foregroundStyle(.white.opacity(0.7)) } }; Spacer(); if let url = meeting.link { Link("Join", destination: url).buttonStyle(.bordered) } } }
     }
 }
 
@@ -319,7 +319,9 @@ struct SettingsView: View {
                 }
                 Section("Display & audio") {
                     Toggle("Enable brightness adapter (experimental)", isOn: $brightnessEnabled).onChange(of: brightnessEnabled) { _, value in model.brightness.enable(value) }
-                    Text("Volume and brightness changes appear in the notch. Apple's own HUD is not suppressed in this build. Brightness uses an optional compatibility adapter for the built-in display.").font(.caption).foregroundStyle(.secondary)
+                    Toggle("Replace hardware-key overlays (experimental)", isOn: Binding(get: { model.hardwareKeys.enabled }, set: { model.hardwareKeys.enable($0, audio: model.audio, brightness: model.brightness) }))
+                    Text(model.hardwareKeys.status).font(.caption).foregroundStyle(.secondary)
+                    Text("Requires Accessibility permission. Enable again after each launch. Only supported volume/brightness hardware events are intercepted; ordinary typing is not observed.").font(.caption).foregroundStyle(.secondary)
                     Text("Per-app battery drain is not available through the current adapter. Battery time is shown only when macOS provides an estimate.").font(.caption).foregroundStyle(.secondary)
                 }
                 Section("Bluetooth") { Toggle("Monitor AirPods and battery devices", isOn: $bluetoothEnabled).onChange(of: bluetoothEnabled) { _, value in model.bluetooth.enable(value) }; Text(model.bluetooth.status).font(.caption) }

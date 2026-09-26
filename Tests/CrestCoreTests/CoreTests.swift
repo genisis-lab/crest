@@ -80,6 +80,14 @@ func hookInstallationIsIdempotentAndRemovalPreservesOthers() throws {
     check((removed["statusLine"] as? [String: String])?["command"] == "my-status")
     check(removed["permissions"] != nil)
 }
+func hardwareKeysIgnoreUnrelatedEvents() {
+    check(HardwareKey(data1: (0 << 16) | (0x0a << 8))?.down == true)
+    check(HardwareKey(data1: (1 << 16) | (0x0b << 8))?.down == false)
+    check(HardwareKey(data1: (2 << 16) | (0x0a << 8) | 1)?.repeated == true)
+    check(HardwareKey(data1: (7 << 16) | (0x0a << 8))?.code == 7)
+    check(HardwareKey(data1: (16 << 16) | (0x0a << 8)) == nil)
+    check(HardwareKey(data1: (0 << 16) | (0x02 << 8)) == nil)
+}
 
 
 private var failures = 0
@@ -103,7 +111,8 @@ let tests: [(String, () throws -> Void)] = [
     ("Clipboard retention", retentionNeverDeletesPins),
     ("Clipboard exclusion", clipboardExclusionsApplyBeforeCapture),
     ("Encryption authentication", encryptionDetectsTamperingAndWrongKeys),
-    ("Hook merge and uninstall", hookInstallationIsIdempotentAndRemovalPreservesOthers)
+    ("Hook merge and uninstall", hookInstallationIsIdempotentAndRemovalPreservesOthers),
+    ("Hardware key filtering", hardwareKeysIgnoreUnrelatedEvents)
 ]
 for (name, test) in tests { let before = failures; do { try test() } catch { failures += 1; print("FAIL \(name): \(error)") }; if failures == before { print("PASS \(name)") } }
 print("\(tests.count) checks, \(assertions) assertions, \(failures) failures")

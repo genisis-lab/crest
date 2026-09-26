@@ -13,20 +13,20 @@ The target is the public NotchView homepage and release notes, not access to pro
 | Codex usage | Real app-server query, bucket-aware windows and resets, stale state | Real authenticated quota fetched and displayed |
 | Codex approvals | Shared-server status polling and notification handler | Requires a compatible running shared socket; unrelated standalone sessions unsupported |
 | Return to agent session | Codex deep link, Terminal tty targeting, application fallback | Routing metadata tested; exact terminal and desktop deep-link behavior needs live session tests |
-| File tray | Persistent bookmarks, drag-in/out, selection, copy, removal, Finder reveal | Native tray UI inspected; filesystem round-trip manual check recorded in validation |
+| File tray | Persistent bookmarks, drag-in/out, selection, copy, removal, Finder reveal | Native add/select/remove round trip passed; original file preserved |
 | AirDrop | Native sharing service with picker fallback | Requires recipient device for end-to-end delivery |
 | Clipboard | Opt-in history, text/images, search, pins, retention, encrypted disk, app exclusions, selection and drag-out | Encryption, tamper detection, exclusions and retention checks pass; no personal history recorded during QA |
-| Screenshots | User-selected folder, stable completed-file detection, metadata/name filtering | Custom location and localized screenshot names need broader coverage |
+| Screenshots | User-selected folder, persistent bookmark, stable completed-file detection, metadata/name filtering | Custom location and localized screenshot names need broader coverage |
 | Downloads | New-file tray import; `.crdownload` and `.part` byte growth/speed | Total percentages unavailable; Safari package size/progress not implemented |
 | Music | Optional system MediaRemote adapter; direct Music/Spotify automation | Private system API can fail on recent macOS; Podcasts, TV, IINA coverage unverified |
-| Artwork / compact activity | System metadata artwork and compact playback symbol | Direct Music/Spotify artwork and beat visualization remain incomplete |
+| Artwork / compact activity | System metadata artwork, direct Music/Spotify artwork and a compact animated playback symbol | Direct artwork needs live player verification; activity animation is decorative, not audio analysis |
 | Volume | Core Audio read/write and notch notice | Actual device level read; keyboard changes and device-switch matrix outstanding |
 | Brightness | Optional dynamically loaded DisplayServices adapter | Private compatibility API; external display support unverified |
-| Replacing system HUD | Not implemented; system overlay is not suppressed | Explicit parity gap; cannot safely promise replacement across OS versions |
+| Replacing hardware-key HUD | Optional Accessibility-gated system-event tap; handles volume/mute and supported brightness only after a successful device write; other events pass through | Key decoding tests pass. Off by default on every launch; live Accessibility/device testing outstanding. Software controls and unsupported devices retain their system HUD |
 | Charging and battery | IOKit power notifications, percentage and OS time estimate | Real charging state/percentage/estimate displayed |
 | Per-app battery drain | Not implemented | No verified reliable adapter yet |
 | AirPods | Optional OS Bluetooth report parser; available component readings | Physical AirPods/OS-version coverage not verified |
-| Meetings | Opt-in EventKit read access, upcoming list, countdown, recognized HTTPS Join links | Denied-access behavior implemented; real calendar and meeting provider checks outstanding |
+| Meetings | Opt-in EventKit read access, restored authorized connection, upcoming list, countdown, recognized HTTPS Join links | Denied-access behavior implemented; real calendar and meeting provider checks outstanding |
 | First run / login | Notch tour, welcome notice, ServiceManagement login switch | First-run tour checked; login item not enabled during QA |
 | Settings | Native grouped forms and toolbar tabs | Opened and inspected |
 | Sparkle | 2.10 embedded, checks/preferences, stable/beta channels, config validation, release script | Local signature verified; live signed upgrade needs feed + Developer ID + notary profile + Sparkle key |

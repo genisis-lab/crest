@@ -12,6 +12,7 @@ import ServiceManagement
     let power = PowerService()
     let audio = AudioService()
     let brightness = BrightnessService()
+    let hardwareKeys = HardwareKeyService()
     let calendar = CalendarService()
     let bluetooth = BluetoothService()
     let media = MediaService()
@@ -29,18 +30,20 @@ import ServiceManagement
     private var cancellables = Set<AnyCancellable>()
     private var noticeTask: Task<Void, Never>?
     init() {
-        for publisher in [agents.objectWillChange, tray.objectWillChange, clipboard.objectWillChange, downloads.objectWillChange, screenshots.objectWillChange, power.objectWillChange, audio.objectWillChange, brightness.objectWillChange, calendar.objectWillChange, bluetooth.objectWillChange, media.objectWillChange, updates.objectWillChange] {
+        for publisher in [agents.objectWillChange, tray.objectWillChange, clipboard.objectWillChange, downloads.objectWillChange, screenshots.objectWillChange, power.objectWillChange, audio.objectWillChange, brightness.objectWillChange, hardwareKeys.objectWillChange, calendar.objectWillChange, bluetooth.objectWillChange, media.objectWillChange, updates.objectWillChange] {
             publisher.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &cancellables)
         }
         agents.onAttention = { [weak self] text in self?.alert(text, urgent: true) }
         power.onCharge = { [weak self] text in self?.alert(text) }
         audio.onChange = { [weak self] text in self?.alert(text) }
         brightness.onChange = { [weak self] text in self?.alert(text) }
+        hardwareKeys.onChange = { [weak self] text in self?.alert(text) }
         bluetooth.onConnect = { [weak self] text in self?.alert(text) }
         if UserDefaults.standard.bool(forKey: "clipboardEnabled") { clipboard.setEnabled(true) }
         if UserDefaults.standard.bool(forKey: "codexEnabled") { agents.connect(path: UserDefaults.standard.string(forKey: "codexPath") ?? AgentService.findCodex() ?? "", socket: UserDefaults.standard.string(forKey: "codexSocket") ?? "") }
         media.configure(enabled: UserDefaults.standard.bool(forKey: "mediaEnabled"), player: UserDefaults.standard.string(forKey: "mediaPlayer") ?? "System")
         brightness.enable(UserDefaults.standard.bool(forKey: "brightnessEnabled")); bluetooth.enable(UserDefaults.standard.bool(forKey: "bluetoothEnabled"))
+        screenshots.restore(tray: tray, screenshots: true); downloads.restore(tray: tray, screenshots: false)
     }
     func alert(_ text: String, urgent: Bool = false) {
         if !urgent && agents.sessions.contains(where: { $0.state == "Needs you" }) { return }

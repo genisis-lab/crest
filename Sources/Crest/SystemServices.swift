@@ -60,15 +60,15 @@ import Darwin
         address.mSelector = kAudioDevicePropertyMute; var mute: UInt32 = 0; size = 4
         if AudioObjectGetPropertyData(id, &address, 0, nil, &size, &mute) == noErr { muted = mute != 0 }
     }
-    func set(_ value: Float) {
-        guard let id = device() else { return }
+    @discardableResult func set(_ value: Float) -> Bool {
+        guard let id = device() else { return false }
         var address = AudioObjectPropertyAddress(mSelector: kAudioHardwareServiceDeviceProperty_VirtualMainVolume, mScope: kAudioDevicePropertyScopeOutput, mElement: kAudioObjectPropertyElementMain)
-        var volume = min(1, max(0, value)); AudioObjectSetPropertyData(id, &address, 0, nil, UInt32(MemoryLayout.size(ofValue: volume)), &volume); refresh()
+        var volume = min(1, max(0, value)); let status = AudioObjectSetPropertyData(id, &address, 0, nil, UInt32(MemoryLayout.size(ofValue: volume)), &volume); refresh(); return status == noErr
     }
-    func toggleMute() {
-        guard let id = device() else { return }
+    @discardableResult func toggleMute() -> Bool {
+        guard let id = device() else { return false }
         var address = AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyMute, mScope: kAudioDevicePropertyScopeOutput, mElement: kAudioObjectPropertyElementMain)
-        var value: UInt32 = muted ? 0 : 1; AudioObjectSetPropertyData(id, &address, 0, nil, 4, &value); refresh()
+        var value: UInt32 = muted ? 0 : 1; let status = AudioObjectSetPropertyData(id, &address, 0, nil, 4, &value); refresh(); return status == noErr
     }
 }
 
@@ -95,7 +95,7 @@ import Darwin
         var next: Float = 0; available = getValue?(display, &next) == 0
         if available { if initialized && abs(next - value) > 0.015 { onChange?("Brightness · \(Int(next * 100))%") }; value = next; initialized = true }
     }
-    func set(_ value: Float) { if setValue?(display, min(1, max(0, value))) == 0 { refresh() } }
+    @discardableResult func set(_ value: Float) -> Bool { if setValue?(display, min(1, max(0, value))) == 0 { refresh(); return true }; return false }
 }
 
 struct Meeting: Identifiable {
@@ -111,16 +111,27 @@ struct Meeting: Identifiable {
     @Published var enabled = false
     private let store = EKEventStore()
     private var timer: Timer?
+    private var connectionAttempt = 0
+    init() {
+        if UserDefaults.standard.bool(forKey: "calendarEnabled"), EKEventStore.authorizationStatus(for: .event) == .fullAccess { start() }
+    }
     func connect() async {
+        connectionAttempt += 1; let attempt = connectionAttempt
         do {
-            guard try await store.requestFullAccessToEvents() else { status = "Calendar access is off. Enable it in System Settings to connect."; return }
-            enabled = true; refresh(); timer?.invalidate()
-            timer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in Task { @MainActor in self?.refresh() } }
+            let allowed = try await store.requestFullAccessToEvents()
+            guard attempt == connectionAttempt else { return }
+            guard allowed else { status = "Calendar access is off. Enable it in System Settings to connect."; return }
+            UserDefaults.standard.set(true, forKey: "calendarEnabled"); start()
         } catch { status = error.localizedDescription }
     }
-    func disconnect() { enabled = false; timer?.invalidate(); timer = nil; meetings = []; status = "Calendar disconnected." }
+    private func start() {
+        enabled = true; refresh(); timer?.invalidate()
+        timer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in Task { @MainActor in self?.refresh() } }
+    }
+    func disconnect() { connectionAttempt += 1; UserDefaults.standard.set(false, forKey: "calendarEnabled"); enabled = false; timer?.invalidate(); timer = nil; meetings = []; status = "Calendar disconnected." }
     func refresh() {
         guard enabled else { return }
+        guard EKEventStore.authorizationStatus(for: .event) == .fullAccess else { disconnect(); status = "Calendar access was removed. Reconnect to continue."; return }
         let now = Date(); let predicate = store.predicateForEvents(withStart: now.addingTimeInterval(-3600), end: now.addingTimeInterval(86400), calendars: nil)
         meetings = store.events(matching: predicate).filter { event in
             !event.isAllDay && event.endDate > now && event.status != .canceled && !(event.attendees ?? []).contains { $0.isCurrentUser && $0.participantStatus == .declined }
@@ -153,20 +164,19 @@ struct Earbud: Identifiable { var id: String { name }; var name: String; var rea
     }
     func refresh() {
         guard !busy, enabled else { return }; busy = true
-        Task.detached { [weak self] in
-            let p = Process(); let pipe = Pipe(); p.executableURL = URL(fileURLWithPath: "/usr/sbin/system_profiler"); p.arguments = ["SPBluetoothDataType", "-json"]; p.standardOutput = pipe; p.standardError = FileHandle.nullDevice
-            var result: [Earbud] = []
-            if (try? p.run()) != nil {
-                DispatchQueue.global().asyncAfter(deadline: .now() + 20) { if p.isRunning { p.terminate() } }
-                let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                if let json = try? JSONSerialization.jsonObject(with: data) { result = Self.parse(json) }
-            }
-            let captured = result
-            await MainActor.run {
-                guard let self else { return }; self.busy = false; guard self.enabled else { return }
-                for d in captured where d.connected && !self.devices.contains(where: { $0.name == d.name && $0.connected }) { self.onConnect?(d.name + " connected") }
-                self.devices = captured; self.status = captured.isEmpty ? "No connected battery-reporting devices. Some AirPods readings are unavailable on this macOS version." : "OS-reported readings · refreshed every minute"
-            }
+        Task { [weak self] in
+            let captured = await Task.detached {
+                let p = Process(); let pipe = Pipe(); p.executableURL = URL(fileURLWithPath: "/usr/sbin/system_profiler"); p.arguments = ["SPBluetoothDataType", "-json"]; p.standardOutput = pipe; p.standardError = FileHandle.nullDevice
+                if (try? p.run()) != nil {
+                    DispatchQueue.global().asyncAfter(deadline: .now() + 20) { if p.isRunning { p.terminate() } }
+                    let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                    if let json = try? JSONSerialization.jsonObject(with: data) { return Self.parse(json) }
+                }
+                return [Earbud]()
+            }.value
+            guard let self else { return }; self.busy = false; guard self.enabled else { return }
+            for d in captured where d.connected && !self.devices.contains(where: { $0.name == d.name && $0.connected }) { self.onConnect?(d.name + " connected") }
+            self.devices = captured; self.status = captured.isEmpty ? "No connected battery-reporting devices. Some AirPods readings are unavailable on this macOS version." : "OS-reported readings · refreshed every minute"
         }
     }
     nonisolated private static func parse(_ object: Any, connected: Bool = false) -> [Earbud] {
