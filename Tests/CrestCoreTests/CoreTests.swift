@@ -89,6 +89,20 @@ func hardwareKeysIgnoreUnrelatedEvents() {
     check(HardwareKey(data1: (0 << 16) | (0x02 << 8)) == nil)
 }
 
+func quotaFreshnessHandlesOfflineAndClockChanges() {
+    let now = Date(timeIntervalSince1970: 10000)
+    check(!QuotaSnapshot(provider: "Codex", windows: [], receivedAt: now.addingTimeInterval(-599)).isStale(at: now))
+    check(QuotaSnapshot(provider: "Codex", windows: [], receivedAt: now.addingTimeInterval(-601)).isStale(at: now))
+    check(QuotaSnapshot(provider: "Codex", windows: [], receivedAt: now.addingTimeInterval(120)).isStale(at: now))
+}
+func clipboardArchiveMigrationPreservesItemsAndRejectsNewerFormats() throws {
+    let clips = [ClipItem(text: "migration fixture", pinned: true)]
+    check(try ClipboardArchive.decode(JSONEncoder().encode(clips)) == clips)
+    check(try ClipboardArchive.decode(ClipboardArchive.encode(clips)) == clips)
+    check(throws: (any Error).self) { try ClipboardArchive.decode(Data(#"{"version":99,"items":[]}"#.utf8)) }
+    check(throws: (any Error).self) { try ClipboardArchive.decode(Data("broken".utf8)) }
+}
+
 
 private var failures = 0
 private var assertions = 0
@@ -112,7 +126,9 @@ let tests: [(String, () throws -> Void)] = [
     ("Clipboard exclusion", clipboardExclusionsApplyBeforeCapture),
     ("Encryption authentication", encryptionDetectsTamperingAndWrongKeys),
     ("Hook merge and uninstall", hookInstallationIsIdempotentAndRemovalPreservesOthers),
-    ("Hardware key filtering", hardwareKeysIgnoreUnrelatedEvents)
+    ("Hardware key filtering", hardwareKeysIgnoreUnrelatedEvents),
+    ("Quota freshness", quotaFreshnessHandlesOfflineAndClockChanges),
+    ("Clipboard archive migration", clipboardArchiveMigrationPreservesItemsAndRejectsNewerFormats)
 ]
 for (name, test) in tests { let before = failures; do { try test() } catch { failures += 1; print("FAIL \(name): \(error)") }; if failures == before { print("PASS \(name)") } }
 print("\(tests.count) checks, \(assertions) assertions, \(failures) failures")

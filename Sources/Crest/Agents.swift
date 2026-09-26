@@ -8,6 +8,7 @@ import CrestCore
     @Published var claude: QuotaSnapshot?
     @Published var status = "Connect Codex in Settings. Claude connects through the local bridge."
     @Published var connected = false
+    @Published var refreshing = false
     var onAttention: ((String) -> Void)?
     private var process: Process?
     private var input: FileHandle?
@@ -20,6 +21,8 @@ import CrestCore
     private var pendingQuota = Set<Int>()
     private var pendingThreads = Set<Int>()
     private var shared = false
+    private var connectionGeneration = 0
+    private var startedAt = Date.distantPast
     private var eventWatcher: DispatchSourceFileSystemObject?
     private var inboxFD: Int32 = -1
 
@@ -74,6 +77,7 @@ import CrestCore
         disconnect()
         guard FileManager.default.isExecutableFile(atPath: path) else { status = "Choose a working Codex executable in Settings."; return }
         let p = Process(); let stdout = Pipe(); let stdin = Pipe()
+        let generation = connectionGeneration; startedAt = Date()
         shared = !socket.isEmpty
         p.executableURL = URL(fileURLWithPath: path)
         p.arguments = shared ? ["app-server", "proxy", "--sock", socket] : ["app-server", "--listen", "stdio://"]
@@ -81,21 +85,23 @@ import CrestCore
         stdout.fileHandleForReading.readabilityHandler = { [weak self] handle in
             let chunk = handle.availableData
             if chunk.isEmpty { handle.readabilityHandler = nil; return }
-            Task { @MainActor in self?.receive(chunk) }
+            Task { @MainActor in guard self?.connectionGeneration == generation else { return }; self?.receive(chunk) }
         }
         p.terminationHandler = { [weak self] ended in
             Task { @MainActor in
                 guard self?.process === ended else { return }
-                self?.connected = false; self?.status = "Codex disconnected. Reconnect in Settings."; self?.pollTimer?.invalidate()
+                self?.connected = false; self?.refreshing = false; self?.sessions.removeAll { $0.provider == "Codex" }; self?.status = "Codex disconnected. Reconnect in Settings."; self?.pollTimer?.invalidate()
             }
         }
         do {
             try p.run(); process = p; input = stdin.fileHandleForWriting; status = "Connecting to Codex…"
-            send(["id": 1, "method": "initialize", "params": ["clientInfo": ["name": "crest", "title": "Crest", "version": "0.1.0"], "capabilities": ["experimentalApi": true]]])
+            send(["id": 1, "method": "initialize", "params": ["clientInfo": ["name": "crest", "title": "Crest", "version": Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "development"], "capabilities": ["experimentalApi": true]]])
             pollTimer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
                 Task { @MainActor in
                     guard let self else { return }
-                    if !self.connected { self.status = "Codex did not complete its handshake. Reconnect or check the executable."; return }
+                    if !self.connected && Date().timeIntervalSince(self.startedAt) > 30 { self.disconnect(); self.status = "Codex did not complete its handshake. Reconnect or check the executable."; return }
+                    if self.refreshing && Date().timeIntervalSince(self.lastSent) > 30 { self.pendingQuota.removeAll(); self.refreshing = false; self.status = "Usage refresh timed out. Try Refresh again." }
+                    guard self.connected else { return }
                     if Date().timeIntervalSince(self.lastSent) > 300 { self.refresh() }
                     if self.shared { self.readThreads() }
                 }
@@ -103,16 +109,17 @@ import CrestCore
         } catch { status = "Could not launch Codex: \(error.localizedDescription)" }
     }
     func disconnect() {
+        connectionGeneration += 1
         pollTimer?.invalidate(); pollTimer = nil
         let old = process; process = nil
         try? input?.close(); input = nil
         if old?.isRunning == true { old?.terminate() }
-        connected = false; buffer.removeAll(); pendingQuota.removeAll(); pendingThreads.removeAll()
+        connected = false; refreshing = false; buffer.removeAll(); pendingQuota.removeAll(); pendingThreads.removeAll()
         sessions.removeAll { $0.provider == "Codex" }; status = "Codex disconnected."
     }
     func refresh() {
-        guard connected else { return }
-        requestID += 1; pendingQuota.insert(requestID); lastSent = Date()
+        guard connected && !refreshing else { return }
+        requestID += 1; pendingQuota.insert(requestID); lastSent = Date(); refreshing = true
         send(["id": requestID, "method": "account/rateLimits/read"])
     }
     private func readThreads() {
@@ -131,7 +138,7 @@ import CrestCore
             let line = buffer.prefix(upTo: end); buffer.removeSubrange(...end)
             guard let message = try? JSONSerialization.jsonObject(with: line) as? [String: Any] else { continue }
             if let id = message["id"] as? Int, let error = message["error"] as? [String: Any] {
-                pendingQuota.remove(id); pendingThreads.remove(id)
+                if pendingQuota.remove(id) != nil { refreshing = false }; pendingThreads.remove(id)
                 status = error["message"] as? String ?? "Codex request failed."; continue
             }
             if message["id"] as? Int == 1 {
@@ -139,7 +146,7 @@ import CrestCore
                 send(["method": "initialized"]); refresh(); if shared { readThreads() }; continue
             }
             if let id = message["id"] as? Int, pendingQuota.remove(id) != nil, let result = message["result"] as? [String: Any] {
-                codex = QuotaSnapshot.codex(result); lastRefresh = Date()
+                codex = QuotaSnapshot.codex(result); lastRefresh = Date(); refreshing = false
                 status = codex?.windows.isEmpty == false ? (shared ? "Usage and shared-session monitoring connected" : "Usage connected · standalone sessions are not monitored") : "Connected, but this account returned no quota windows."
             }
             if let id = message["id"] as? Int, pendingThreads.remove(id) != nil, let result = message["result"] as? [String: Any], let threads = result["data"] as? [[String: Any]] {

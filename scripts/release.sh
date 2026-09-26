@@ -1,13 +1,21 @@
 #!/bin/bash
 set -euo pipefail
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+source "$(dirname "$0")/environment.sh"
 : "${CREST_SIGN_IDENTITY:?Set the Developer ID Application signing identity}"
 : "${CREST_NOTARY_PROFILE:?Set an existing notarytool Keychain profile name}"
 : "${CREST_RELEASE_CONFIG:?Set a local release-config.json path}"
+: "${CREST_DOWNLOAD_PREFIX:?Set HTTPS archive download prefix}"
 [[ "$CREST_SIGN_IDENTITY" == "Developer ID Application:"* ]] || { echo 'A Developer ID Application identity is required'; exit 1; }
+python3 - "$CREST_DOWNLOAD_PREFIX" <<'PY'
+import sys
+from urllib.parse import urlsplit
+value = sys.argv[1]
+url = urlsplit(value)
+if (url.scheme != 'https' or not url.hostname or url.username or url.password or url.query or url.fragment
+        or not value.endswith('/') or any(c.isspace() for c in value)):
+    raise SystemExit('Download prefix must be HTTPS, without credentials/query/fragment, and end in /')
+PY
 bash "$ROOT/scripts/build.sh"
-DIST="${CREST_DIST_DIR:-$ROOT/dist}"
-BUILD="${CREST_BUILD_DIR:-$ROOT/.build}"
 APP="$(cat "$DIST/app-path.txt")"
 FRAMEWORK="$APP/Contents/Frameworks/Sparkle.framework"
 # Sign Mach-O helpers first, then nested bundles, then the outer bundle.

@@ -35,7 +35,8 @@ public struct QuotaSnapshot: Codable, Equatable {
     public init(provider: String, windows: [QuotaWindow], receivedAt: Date = Date(), plan: String? = nil) {
         self.provider = provider; self.windows = windows; self.receivedAt = receivedAt; self.plan = plan
     }
-    public var stale: Bool { Date().timeIntervalSince(receivedAt) > 600 }
+    public var stale: Bool { isStale(at: Date()) }
+    public func isStale(at date: Date) -> Bool { date.timeIntervalSince(receivedAt) > 600 || receivedAt.timeIntervalSince(date) > 60 }
     public static func codex(_ result: [String: Any], now: Date = Date()) -> QuotaSnapshot {
         let buckets = result["rateLimitsByLimitId"] as? [String: [String: Any]]
         let fallback = result["rateLimits"] as? [String: Any]
@@ -142,6 +143,24 @@ public struct HardwareKey {
 public enum EncryptedArchive {
     public static func seal(_ data: Data, key: SymmetricKey) throws -> Data { try AES.GCM.seal(data, using: key).combined! }
     public static func open(_ data: Data, key: SymmetricKey) throws -> Data { try AES.GCM.open(AES.GCM.SealedBox(combined: data), using: key) }
+}
+
+/// Version the plaintext inside the encrypted archive, while accepting the original 0.1 array.
+public enum ClipboardArchive {
+    private struct Envelope: Codable { var version: Int; var items: [ClipItem] }
+    public enum ArchiveError: LocalizedError {
+        case unsupportedVersion(Int)
+        public var errorDescription: String? {
+            switch self { case .unsupportedVersion(let version): return "Clipboard archive version \(version) requires a newer Crest build. Existing history is preserved." }
+        }
+    }
+    public static func encode(_ items: [ClipItem]) throws -> Data { try JSONEncoder().encode(Envelope(version: 1, items: items)) }
+    public static func decode(_ data: Data) throws -> [ClipItem] {
+        if let legacy = try? JSONDecoder().decode([ClipItem].self, from: data) { return legacy }
+        let envelope = try JSONDecoder().decode(Envelope.self, from: data)
+        guard envelope.version == 1 else { throw ArchiveError.unsupportedVersion(envelope.version) }
+        return envelope.items
+    }
 }
 
 public enum HookConfiguration {

@@ -1,6 +1,7 @@
 import AppKit
 import CryptoKit
 import Security
+import LocalAuthentication
 import CrestCore
 
 struct TrayItem: Identifiable, Codable {
@@ -14,20 +15,44 @@ struct TrayItem: Identifiable, Codable {
 @MainActor final class TrayService: ObservableObject {
     @Published var items: [TrayItem] = []
     @Published var error: String?
+    @Published var feedback: String?
+    @Published private(set) var canUndo = false
+    var onInteraction: ((Bool) -> Void)?
+    private var removed: [(Int, TrayItem)] = []
+    private var unreadableData: Data?
+    private var savedFileUnreadable = false
     private let file = CrestPaths.root.appendingPathComponent("tray.json")
     init() {
-        if let data = try? Data(contentsOf: file) { do { items = try JSONDecoder().decode([TrayItem].self, from: data) } catch { self.error = "The tray could not be loaded. Its saved file has been preserved." } }
+        if FileManager.default.fileExists(atPath: file.path) {
+            do { let data = try Data(contentsOf: file); unreadableData = data; items = try JSONDecoder().decode([TrayItem].self, from: data); unreadableData = nil }
+            catch { savedFileUnreadable = unreadableData == nil; self.error = savedFileUnreadable ? "The saved tray cannot be read. Changes will not be saved until file access is restored and Crest restarts." : "The tray could not be loaded. Its saved file will be backed up before any changes." }
+        }
     }
     func add(_ urls: [URL]) {
         for url in urls where url.isFileURL && FileManager.default.fileExists(atPath: url.path) && !items.contains(where: { $0.url == url }) {
             items.insert(TrayItem(path: url.path, bookmark: try? url.bookmarkData(options: .minimalBookmark)), at: 0)
         }
-        save()
+        feedback = nil; save()
     }
-    func remove(_ ids: Set<UUID>) { items.removeAll { ids.contains($0.id) }; save() }
-    func save() { do { try CrestPaths.save(JSONEncoder().encode(items), to: file) } catch { self.error = error.localizedDescription } }
-    func choose() { NSApp.activate(ignoringOtherApps: true); let panel = NSOpenPanel(); panel.canChooseDirectories = true; panel.allowsMultipleSelection = true; if panel.runModal() == .OK { add(panel.urls) } }
-    func copy(_ ids: Set<UUID>) { NSPasteboard.general.clearContents(); NSPasteboard.general.writeObjects(items.filter { ids.contains($0.id) && $0.exists }.map { $0.url as NSURL }) }
+    func remove(_ ids: Set<UUID>) { removed = items.enumerated().filter { ids.contains($0.element.id) }.map { ($0.offset, $0.element) }; items.removeAll { ids.contains($0.id) }; canUndo = !removed.isEmpty; save(); feedback = "Removed from tray. Originals are unchanged." }
+    func undoRemoval() {
+        for (index, item) in removed where !items.contains(where: { $0.id == item.id || $0.url == item.url }) { items.insert(item, at: min(index, items.count)) }
+        removed = []; canUndo = false; save(); feedback = "Restored to tray."
+    }
+    func save() {
+        guard !savedFileUnreadable else { return }
+        do {
+            if let unreadableData { try CrestPaths.save(unreadableData, to: CrestPaths.root.appendingPathComponent("tray-recovery-\(UUID().uuidString).json")); self.unreadableData = nil }
+            try CrestPaths.save(JSONEncoder().encode(items), to: file); error = nil
+        } catch { self.error = error.localizedDescription }
+    }
+    func choose() { onInteraction?(true); defer { onInteraction?(false) }; NSApp.activate(ignoringOtherApps: true); let panel = NSOpenPanel(); panel.canChooseFiles = true; panel.canChooseDirectories = true; panel.allowsMultipleSelection = true; if panel.runModal() == .OK { add(panel.urls) } }
+    func copy(_ ids: Set<UUID>) {
+        let urls = items.filter { ids.contains($0.id) && $0.exists }.map { $0.url as NSURL }
+        guard !urls.isEmpty else { feedback = "The selected files are unavailable."; return }
+        NSPasteboard.general.clearContents(); let success = NSPasteboard.general.writeObjects(urls)
+        feedback = success ? "Copied \(urls.count) \(urls.count == 1 ? "item" : "items")." : "Could not copy the selected files."
+    }
     func share(_ ids: Set<UUID>) { Sharing.airDrop(items.filter { ids.contains($0.id) && $0.exists }.map { $0.url }) }
 }
 
@@ -40,11 +65,12 @@ struct TrayItem: Identifiable, Codable {
 }
 
 enum ClipboardKey {
-    static func load(create: Bool) throws -> SymmetricKey {
-        let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: "app.crest.clipboard", kSecAttrAccount as String: "local-v1", kSecReturnData as String: true]
+    static func load(create: Bool, allowAuthentication: Bool = false) throws -> SymmetricKey {
+        let context = LAContext(); context.interactionNotAllowed = !allowAuthentication
+        let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: "app.crest.clipboard", kSecAttrAccount as String: "local-v1", kSecReturnData as String: true, kSecUseAuthenticationContext as String: context]
         var result: CFTypeRef?; let status = SecItemCopyMatching(query as CFDictionary, &result)
         if status == errSecSuccess, let data = result as? Data, data.count == 32 { return SymmetricKey(data: data) }
-        guard status == errSecItemNotFound && create else { throw NSError(domain: "Crest.Keychain", code: Int(status), userInfo: [NSLocalizedDescriptionKey: "Clipboard encryption key is unavailable. Existing history is preserved."]) }
+        guard status == errSecItemNotFound && create else { throw NSError(domain: "Crest.Keychain", code: Int(status), userInfo: [NSLocalizedDescriptionKey: "Clipboard encryption key is unavailable. Existing history is preserved. Enable recording again in Settings to allow macOS to request access."]) }
         let key = SymmetricKey(size: .bits256); let bytes = key.withUnsafeBytes { Data($0) }
         var add = query; add.removeValue(forKey: kSecReturnData as String); add[kSecValueData as String] = bytes; add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
         let added = SecItemAdd(add as CFDictionary, nil)
@@ -54,25 +80,42 @@ enum ClipboardKey {
 @MainActor final class ClipboardService: ObservableObject {
     @Published var items: [ClipItem] = []
     @Published var enabled = false
+    @Published var loading = false
     @Published var error: String?
+    @Published var feedback: String?
     @Published var days: Int = UserDefaults.standard.object(forKey: "retention") as? Int ?? 30 { didSet { UserDefaults.standard.set(days, forKey: "retention"); prune(); persist() } }
     @Published var exclusions: String = UserDefaults.standard.string(forKey: "exclusions") ?? "" { didSet { UserDefaults.standard.set(exclusions, forKey: "exclusions") } }
     private var key: SymmetricKey?
     private var timer: Timer?
     private var count = NSPasteboard.general.changeCount
     private var lastPrune = Date()
+    private var loadGeneration = 0
     private let file = CrestPaths.root.appendingPathComponent("clipboard.aesgcm")
-    func setEnabled(_ value: Bool) {
+    func setEnabled(_ value: Bool, allowAuthentication: Bool = false) {
+        loadGeneration += 1; let generation = loadGeneration
         timer?.invalidate(); timer = nil
-        if !value { enabled = false; UserDefaults.standard.set(false, forKey: "clipboardEnabled"); return }
-        do {
-            let exists = FileManager.default.fileExists(atPath: file.path)
-            key = try ClipboardKey.load(create: !exists)
-            if exists, let key { items = try JSONDecoder().decode([ClipItem].self, from: EncryptedArchive.open(Data(contentsOf: file), key: key)) }
-            prune(); error = nil; enabled = true; count = NSPasteboard.general.changeCount
-            UserDefaults.standard.set(true, forKey: "clipboardEnabled")
-            timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in Task { @MainActor in self?.poll() } }
-        } catch { self.error = error.localizedDescription; enabled = false; key = nil; items = [] }
+        if !value { enabled = false; loading = false; key = nil; items = []; UserDefaults.standard.set(false, forKey: "clipboardEnabled"); return }
+        loading = true; enabled = false; error = nil
+        let archive = file
+        Task { [self] in
+            let result = await Task.detached { () -> Result<(SymmetricKey, [ClipItem]), Error> in
+                Result {
+                    let exists = FileManager.default.fileExists(atPath: archive.path)
+                    let key = try ClipboardKey.load(create: !exists, allowAuthentication: allowAuthentication)
+                    let items = exists ? try ClipboardArchive.decode(EncryptedArchive.open(Data(contentsOf: archive), key: key)) : []
+                    return (key, items)
+                }
+            }.value
+            guard loadGeneration == generation else { return }
+            loading = false
+            switch result {
+            case .success(let (loadedKey, loadedItems)):
+                key = loadedKey; items = loadedItems; prune(); enabled = true; count = NSPasteboard.general.changeCount
+                UserDefaults.standard.set(true, forKey: "clipboardEnabled")
+                timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in Task { @MainActor in self?.poll() } }
+            case .failure(let failure): error = failure.localizedDescription; enabled = false; key = nil; items = []
+            }
+        }
     }
     private func poll() {
         if Date().timeIntervalSince(lastPrune) > 60 { prune(); persist(); lastPrune = Date() }
@@ -99,13 +142,14 @@ enum ClipboardKey {
     }
     private func persist() {
         guard let key else { return }
-        do { try CrestPaths.save(EncryptedArchive.seal(JSONEncoder().encode(items), key: key), to: file) }
+        do { try CrestPaths.save(EncryptedArchive.seal(ClipboardArchive.encode(items), key: key), to: file) }
         catch { self.error = "History could not be saved: \(error.localizedDescription)" }
     }
     func pin(_ id: UUID) { if let index = items.firstIndex(where: { $0.id == id }) { items[index].pinned.toggle(); persist() } }
     func delete(_ ids: Set<UUID>) { items.removeAll { ids.contains($0.id) }; persist() }
     func copy(_ ids: Set<UUID>) {
         let selected = items.filter { ids.contains($0.id) }; let pasteboard = NSPasteboard.general
+        guard !selected.isEmpty else { return }
         pasteboard.clearContents()
         if selected.allSatisfy({ $0.text != nil }) { pasteboard.setString(selected.compactMap(\.text).joined(separator: "\n"), forType: .string) }
         else {
@@ -116,6 +160,7 @@ enum ClipboardKey {
             pasteboard.writeObjects(objects)
         }
         count = pasteboard.changeCount
+        feedback = "Copied \(selected.count) \(selected.count == 1 ? "item" : "items")."
     }
     func share(_ ids: Set<UUID>) {
         let values: [Any] = items.filter { ids.contains($0.id) }.compactMap { item in if let text = item.text { return text }; if let data = item.image { return NSImage(data: data) }; return nil }

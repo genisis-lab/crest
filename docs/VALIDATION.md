@@ -26,3 +26,17 @@ Development validation, September 26, 2026. Local environment: Apple M1 Pro, mac
 - Developer ID signing/notarization and an end-to-end Sparkle upgrade between two real releases, including rejection and recovery cases in [UPDATES.md](UPDATES.md).
 
 See [FEATURES.md](FEATURES.md) for the explicit parity gaps. Code being present does not mean every integration is verified.
+
+
+## Version 0.2 UI and reliability pass
+
+- Replaced the tall dashboard with a compact control-center layout and native sidebar Settings. Verified Overview, Agents, Tray, Settings and contextual setup navigation in the running app.
+- Keyboard Command-3 navigated to Tray. A disposable text file was added through the native file picker; search showed both the correct match and a no-results state; Quick Look rendered its contents. Remove and Undo removal visibly updated the tray. The test reference was then removed and the original file remained intact.
+- Found and repaired a launch hang when clipboard restoration waited for Keychain access on the main thread. The subsequent packaged app launched successfully without a Keychain prompt; unavailable access left recording off and retained the encrypted archive.
+- Thirteen core checks / 47 assertions passed, including legacy clipboard archive migration, unsupported archive rejection, and time-based quota freshness. Bridge integration passed. Eight invalid release configurations were rejected without changing the target bundle; valid release metadata was accepted.
+- Pinning intentionally starts off each launch. Exit grace reduced from 650 to 120 ms; animation uses the common run-loop mode and a faster critically damped spring. Runtime response still includes animation and system scheduling; 120 ms is the configured grace, not a measured total collapse time.
+- Synced Documents caused compiler intermediates to change during a build. Build/test/release scripts now share a per-project cache and content-identical source snapshot outside File Provider storage.
+- Final visual review found and corrected a blank Settings window opened by Command-comma and a clipped section heading. The shortcut now opens the same Settings window as the app controls. The final 0.2.0 build visibly shows the General heading and Keep the notch expanded switched off.
+- The final production-configuration development archive (version 0.2.0, build 2) was extracted into a fresh temporary directory and passed deep, strict signature verification. Its compiled source snapshot was byte-compared with the repository source and matched. Signing remains ad hoc.
+
+The release gates above remain open. This pass does not establish production readiness, universal hardware support, or a completed signed Sparkle upgrade.

@@ -14,15 +14,15 @@ bash scripts/build.sh
 open "$(cat dist/app-path.txt)"
 ```
 
-The build script creates an ad-hoc signed local application in a temporary staging directory and delivers `dist/Crest.zip`. Unzip it into Applications for persistent use. Staging outside synced Documents avoids File Provider metadata interfering with code signing. It does not install a login item, publish a release, or grant permissions. You can also open `Package.swift` in Xcode. The packaging script embeds Sparkle and the Swift bridge helper into an application bundle.
+The build script creates an ad-hoc signed local application in a temporary staging directory and delivers `dist/Crest.zip`. Unzip it into Applications for persistent use. A content-identical source snapshot and compiler intermediates use a per-project directory under `~/Library/Caches/Crest`; app staging uses the system temporary directory. Keeping both outside synced Documents avoids File Provider changes interfering with compilation and code signing. It does not install a login item, publish a release, or grant permissions. You can also open `Package.swift` in Xcode. The packaging script embeds Sparkle and the Swift bridge helper into an application bundle.
 
 On some Command Line Tools 27 installations, the SwiftUI macro plugin is absent. The scripts prefer the installed macOS 26.5 SDK in that case. Override `CREST_SDK`, `CREST_BUILD_DIR`, `CREST_DIST_DIR` or `CREST_CONFIGURATION` as needed. The assertion runner has no XCTest/Swift Testing dependency, so it runs with Command Line Tools alone.
 
 ## Using Crest
 
-Hover the notch to expand it. Pin it to stay open, or use the menu-bar mountain icon. Macs without a notch use a top-center panel. Drag files into the panel, select them, then copy, AirDrop or remove the tray reference. Removing a tray item never deletes the source file.
+Hover the notch to expand it. It begins collapsing 120 ms after the pointer leaves, except while using a file dialog, dragging, or previewing. Pin it to stay open, or use the menu-bar mountain icon. Pinning is off at each launch and is never restored automatically. Macs without a notch use a top-center panel. Drag files into the panel, select them, then copy, AirDrop or remove the tray reference. Removing a tray item never deletes the source file.
 
-The interface contains Overview, Agents, Tray and Clipboard. Native Settings includes General, Connections, Files & Privacy, Media & System, and Updates.
+The interface contains Overview, Agents, Tray and Clipboard. Overview modules can be hidden in Settings. Native sidebar Settings includes General, Connections, Files & Privacy, Media & System, Updates and Support. Command-1 through Command-4 switch sections while Crest is focused; Command-P pins it and Escape collapses it. File search, Quick Look, and undo for tray removal are built in.
 
 ### Claude and Codex
 
@@ -42,7 +42,7 @@ Local application data is stored in `~/Library/Application Support/Crest`, outsi
 
 ## Coverage and limitations
 
-See [FEATURES.md](docs/FEATURES.md) for the implementation/verification matrix and [VALIDATION.md](docs/VALIDATION.md) for test evidence. Features that depend on private compatibility APIs, hardware, permissions or external provider versions are not represented as universally supported.
+See [PRODUCTION-READINESS.md](docs/PRODUCTION-READINESS.md) for the prioritized release gates and [FEATURES.md](docs/FEATURES.md) for the implementation/verification matrix and [VALIDATION.md](docs/VALIDATION.md) for test evidence. Features that depend on private compatibility APIs, hardware, permissions or external provider versions are not represented as universally supported.
 
 ## Updates
 

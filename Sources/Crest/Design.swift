@@ -7,17 +7,39 @@ struct NotchMaterial: ViewModifier {
     var expanded: Bool
     @Environment(\.accessibilityReduceTransparency) var reduceTransparency
     @Environment(\.colorSchemeContrast) var contrast
-    private var shape: UnevenRoundedRectangle { .init(bottomLeadingRadius: expanded ? 25 : 14, bottomTrailingRadius: expanded ? 25 : 14) }
+    private var shape: UnevenRoundedRectangle { .init(bottomLeadingRadius: expanded ? 28 : 14, bottomTrailingRadius: expanded ? 28 : 14) }
     @ViewBuilder func body(content: Content) -> some View {
         if enabled && !reduceTransparency && contrast != .increased {
             if #available(macOS 26, *) {
-                GlassEffectContainer { content.background(.black.opacity(0.22), in: shape).glassEffect(.regular.tint(.black.opacity(0.4)), in: shape) }
-            } else { content.background(.regularMaterial, in: shape).overlay(shape.stroke(.white.opacity(0.12), lineWidth: 0.5)) }
+                // Glass provides the outer edge; a stable tint keeps text legible on a bright desktop.
+                content.background {
+                    shape.fill(.black).glassEffect(.regular, in: shape)
+                        .overlay(shape.fill(Color(red: 0.065, green: 0.07, blue: 0.08).opacity(0.94)))
+                }.overlay(shape.stroke(.white.opacity(0.12), lineWidth: 0.5))
+            } else { content.background(.ultraThinMaterial, in: shape).background(.black, in: shape).overlay(shape.stroke(.white.opacity(0.12), lineWidth: 0.5)) }
         } else {
             content.background(Color(red: 0.035, green: 0.038, blue: 0.045), in: shape)
                 .overlay(shape.stroke(.white.opacity(contrast == .increased ? 0.7 : 0.08), lineWidth: contrast == .increased ? 1.5 : 0.5))
         }
     }
+}
+
+struct QuietButtonStyle: ButtonStyle {
+    var selected = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .foregroundStyle(selected ? .white : .white.opacity(0.78))
+            .padding(7)
+            .background(.white.opacity(configuration.isPressed ? 0.19 : selected ? 0.12 : 0.04), in: RoundedRectangle(cornerRadius: 9))
+            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.96 : 1)
+    }
+}
+
+enum CrestStyle {
+    static let blue = Color(red: 0.42, green: 0.68, blue: 1)
+    static let secondary = Color.white.opacity(0.68)
+    static let tertiary = Color.white.opacity(0.46)
 }
 
 /// Interruptible, critically damped window motion. A new target keeps its velocity.
@@ -38,14 +60,15 @@ struct NotchMaterial: ViewModifier {
         target = next
         if timer == nil {
             let frame = panel.frame; current = [frame.midX, frame.maxY, frame.width, frame.height]; last = Date()
-            timer = Timer.scheduledTimer(withTimeInterval: 1 / 60, repeats: true) { [weak self] _ in Task { @MainActor in self?.step() } }
+            let animationTimer = Timer(timeInterval: 1 / 60, repeats: true) { [weak self] _ in Task { @MainActor in self?.step() } }
+            timer = animationTimer; RunLoop.main.add(animationTimer, forMode: .common)
         }
     }
     private func step() {
         let now = Date(); let dt = min(0.032, now.timeIntervalSince(last)); last = now
         var settled = true
         for i in 0..<4 {
-            let acceleration = 400 * (target[i] - current[i]) - 40 * velocity[i]
+            let acceleration = 625 * (target[i] - current[i]) - 50 * velocity[i]
             velocity[i] += acceleration * dt; current[i] += velocity[i] * dt
             if abs(current[i] - target[i]) > 0.2 || abs(velocity[i]) > 0.2 { settled = false }
         }

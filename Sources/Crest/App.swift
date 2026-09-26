@@ -18,6 +18,7 @@ import ServiceManagement
     let media = MediaService()
     let updates = UpdateService()
     @Published var expanded = false
+    // Pinning is session-only and intentionally off on every launch.
     @Published var pinned = false
     @Published var tab = "Overview"
     @Published var notice: String?
@@ -25,6 +26,9 @@ import ServiceManagement
     @Published var hideFullScreen = UserDefaults.standard.object(forKey: "hideFullScreen") as? Bool ?? true { didSet { UserDefaults.standard.set(hideFullScreen, forKey: "hideFullScreen") } }
     @Published var notchHeight: CGFloat = 32
     @Published var collapsedWidth: CGFloat = 290
+    @Published var cutoutWidth: CGFloat = 180
+    @Published var interacting = false
+    @Published var settingsSection: SettingsSection = .general
     @Published var onboarding = !UserDefaults.standard.bool(forKey: "onboarded")
     var showSettings: (() -> Void)?
     private var cancellables = Set<AnyCancellable>()
@@ -38,6 +42,7 @@ import ServiceManagement
         audio.onChange = { [weak self] text in self?.alert(text) }
         brightness.onChange = { [weak self] text in self?.alert(text) }
         hardwareKeys.onChange = { [weak self] text in self?.alert(text) }
+        tray.onInteraction = { [weak self] value in self?.interacting = value }
         bluetooth.onConnect = { [weak self] text in self?.alert(text) }
         if UserDefaults.standard.bool(forKey: "clipboardEnabled") { clipboard.setEnabled(true) }
         if UserDefaults.standard.bool(forKey: "codexEnabled") { agents.connect(path: UserDefaults.standard.string(forKey: "codexPath") ?? AgentService.findCodex() ?? "", socket: UserDefaults.standard.string(forKey: "codexSocket") ?? "") }
@@ -52,11 +57,20 @@ import ServiceManagement
         noticeTask = Task { try? await Task.sleep(for: .seconds(5)); guard !Task.isCancelled else { return }; notice = nil }
     }
     func finishOnboarding() { onboarding = false; UserDefaults.standard.set(true, forKey: "onboarded") }
+    func openSettings(_ section: SettingsSection) { settingsSection = section; showSettings?() }
 }
 
 @main struct CrestApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var delegate
-    var body: some Scene { Settings { EmptyView() } }
+    var body: some Scene {
+        Settings { SettingsView(model: delegate.model) }
+            .commands {
+                CommandGroup(replacing: .appSettings) {
+                    Button("Settings…") { delegate.settings() }
+                        .keyboardShortcut(",", modifiers: .command)
+                }
+            }
+    }
 }
 
 @MainActor final class NotchPanel: NSPanel {
@@ -87,6 +101,7 @@ import ServiceManagement
         panel.contentView = NSHostingView(rootView: NotchView(model: model))
         model.showSettings = { [weak self] in self?.settings() }
         model.$expanded.combineLatest(model.$notice).sink { [weak self] _, _ in DispatchQueue.main.async { self?.layout() } }.store(in: &sinks)
+        model.$tab.combineLatest(model.$onboarding).sink { [weak self] _, _ in DispatchQueue.main.async { self?.layout() } }.store(in: &sinks)
         NotificationCenter.default.addObserver(self, selector: #selector(displayChanged), name: NSApplication.didChangeScreenParametersNotification, object: nil)
         NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(displayChanged), name: NSWorkspace.didWakeNotification, object: nil)
         NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(checkVisibility), name: NSWorkspace.activeSpaceDidChangeNotification, object: nil)
@@ -103,9 +118,11 @@ import ServiceManagement
         let left = screen.auxiliaryTopLeftArea, right = screen.auxiliaryTopRightArea
         let cutoutWidth = max(180, (right?.minX ?? 0) - (left?.maxX ?? 0))
         model.notchHeight = max(30, screen.safeAreaInsets.top)
-        model.collapsedWidth = min(400, cutoutWidth + 110)
-        let width: CGFloat = model.expanded ? 490 : model.notice == nil ? model.collapsedWidth : 410
-        let height: CGFloat = model.expanded ? 510 + model.notchHeight : model.notchHeight + (model.notice == nil ? 5 : 34)
+        model.cutoutWidth = cutoutWidth
+        model.collapsedWidth = cutoutWidth + 96
+        let width: CGFloat = model.expanded ? min(568, screen.frame.width - 24) : model.notice == nil ? model.collapsedWidth : max(410, model.collapsedWidth)
+        let contentHeight: CGFloat = model.onboarding ? 460 : model.tab == "Overview" ? 438 : 488
+        let height: CGFloat = model.expanded ? min(contentHeight + model.notchHeight, screen.visibleFrame.height - 20) : model.notchHeight + (model.notice == nil ? 5 : 34)
         let rect = NSRect(x: screen.frame.midX - width / 2, y: screen.frame.maxY - height, width: width, height: height)
         spring.move(panel, to: rect, immediately: panel.frame.width == 0 || NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
     }
@@ -129,12 +146,12 @@ import ServiceManagement
     @objc func toggle() { model.expanded.toggle(); if model.expanded { panel.makeKeyAndOrderFront(nil) } }
     @objc func settings() {
         if settingsWindow == nil {
-            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 700, height: 680), styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
+            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 800, height: 660), styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
             window.title = "Crest Settings"; window.contentView = NSHostingView(rootView: SettingsView(model: model)); window.isReleasedWhenClosed = false; window.center(); settingsWindow = window
         }
         NSApp.activate(ignoringOtherApps: true); settingsWindow?.makeKeyAndOrderFront(nil)
     }
-    @objc func updates() { if model.updates.configured { model.updates.check() } else { settings() } }
+    @objc func updates() { if model.updates.configured { model.updates.check() } else { model.openSettings(.updates) } }
     @objc func quit() { model.agents.disconnect(); NSApp.terminate(nil) }
     func applicationWillTerminate(_ notification: Notification) { model.agents.disconnect() }
 }
