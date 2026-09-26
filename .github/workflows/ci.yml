@@ -1,0 +1,17 @@
+name: Swift build and core checks
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - name: Core checks
+        run: bash scripts/test.sh
+      - name: Bundle and verify local build
+        run: bash scripts/build.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Crest-development-build
+          path: dist/Crest.zip

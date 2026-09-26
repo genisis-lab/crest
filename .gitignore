@@ -1,0 +1,16 @@
+.build/
+.swiftpm/
+dist/
+.DS_Store
+*.dSYM/
+*.xcuserstate
+*.p12
+*.p8
+*.key
+*.pem
+*.mobileprovision
+.env
+.env.*
+release-config.json
+*.aesgcm
+local-config/
