@@ -10,9 +10,11 @@ Development validation, September 26, 2026. Local environment: Apple M1 Pro, mac
 - App launched through the native UI. First-run onboarding, Overview, Agents, Tray, Clipboard, native Settings and Connections were inspected.
 - Codex connection was activated through the app. Real quota windows returned and rendered. Account values are intentionally omitted from this repository.
 - Actual battery percentage, power connection, time estimate, output volume and supported-display brightness appeared in the UI.
+- Final archive was extracted into a clean temporary directory and passed deep signature verification again. The exact packaged app launched, reconnected to Codex automatically, and rendered the native interface.
+- Native checkbox selection and removal of a folder reference were also exercised in the final package; the project folder and source files remained intact.
 - File tray round trip: selected this project's README through the native Open dialog, verified it appeared, selected it, removed its tray reference, and confirmed the original README still exists. Fixed activation of the Open dialog discovered during this check.
 - Clipboard persistence, calendar access, Claude integration installation, login-item enablement, Accessibility permission and AirDrop delivery were not enabled during QA. Permission-dependent integrations therefore remain unverified with live user data/devices.
-- The source was pushed to the private `genisis-lab/crest` GitHub repository. The initial GitHub Actions run passed both core tests and packaging; its optional artifact upload failed because the account's artifact-storage quota was full. That optional upload step has been removed. Local build delivery is unaffected.
+- The source was pushed to the private `genisis-lab/crest` GitHub repository. The initial GitHub Actions run passed both core tests and packaging; its optional artifact upload failed because the account's artifact-storage quota was full. That optional upload step has been removed. The [follow-up run](https://github.com/genisis-lab/crest/actions/runs/36220172450) for source commit `f5c8fdf` passed all checks and packaging. Local build delivery is unaffected.
 
 ## Remaining release gates
 
