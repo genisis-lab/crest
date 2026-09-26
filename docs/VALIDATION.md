@@ -40,3 +40,13 @@ See [FEATURES.md](FEATURES.md) for the explicit parity gaps. Code being present 
 - The final production-configuration development archive (version 0.2.0, build 2) was extracted into a fresh temporary directory and passed deep, strict signature verification. Its compiled source snapshot was byte-compared with the repository source and matched. Signing remains ad hoc.
 
 The release gates above remain open. This pass does not establish production readiness, universal hardware support, or a completed signed Sparkle upgrade.
+
+
+## Version 0.3 feature and release-tooling pass
+
+- Confirmed the running 0.2.0 app was build 2 before starting this pass. Apple Developer account inspection showed free developer access, and the local keychain had Apple Development identities but no Developer ID Application identity. The owner chose to defer the paid membership and keep development-only builds. No account enrollment, payment, distribution certificate, public feed or notarized release was created.
+- Added user-selected display placement, an optional Control–Option–Space global shortcut, app power estimates, Safari download-package tracking and local diagnostics export. These preserve opt-in defaults for monitoring and shortcut registration.
+- Eighteen core checks / 90 assertions passed. New cases exercise independent simultaneous sessions, stale events after session end, energy units and PID reuse, package payload sizing/symlink exclusion, diagnostics allowlisting and archive preservation on failure.
+- Bridge integration tests passed. Release configuration and stable/beta appcast validation passed. Sparkle 2.10’s actual signing/verifying tools accepted disposable signed fixtures and rejected a changed archive, wrong key and changed feed. No persistent signing key was generated.
+- The 0.3.0 app (build 3) compiles, includes offline privacy/uninstall/upstream license documents, and passes post-extraction deep strict signature, identity, framework, helper, resource and architecture checks. SHA-256 checksums and a package manifest are generated automatically.
+- Full runtime coverage is recorded in [TEST-MATRIX.md](TEST-MATRIX.md). Signed upgrade, recipient AirDrop, live Claude and the hardware/permission matrix are not claimed complete.

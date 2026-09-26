@@ -1,6 +1,6 @@
 # Crest: path to a production release
 
-Review date: September 26, 2026. Target: a native macOS utility inspired by the interaction patterns of [NotchView](https://notchview-site.vercel.app/), with an original interface. Source remains private. Version 0.2 is a development build, not a production release.
+Review date: September 26, 2026. Target: a native macOS utility inspired by the interaction patterns of [NotchView](https://notchview-site.vercel.app/), with an original interface. Source remains private. Version 0.3 is a development build, not a production release. The owner chose to defer paid Apple Developer enrollment, distribution signing, notarization and public release. No enrollment, payment, certificate creation or live feed publication was performed.
 
 ## What changed in 0.2
 
@@ -15,6 +15,16 @@ Review date: September 26, 2026. Target: a native macOS utility inspired by the 
 - Compilation uses a content-identical source snapshot and outputs in the local user cache rather than the synced source folder, avoiding File Provider timestamp mutations during builds.
 - Release configuration rejects unsafe version strings and unsuitable feed/download URLs before notarization. Regression checks ensure invalid configuration does not alter the bundle.
 
+## What changed in 0.3
+
+- Added persistent display selection with reconnect fallback, an optional OS-registered global shortcut, and a keyboard-open state that does not depend on hovering.
+- Added optional app power estimates from macOS process counters. Readable helper processes within an app bundle are grouped. Measurements omit unreported energy and external system services; no battery percentage is inferred.
+- Added Safari download-package payload bytes/speed and optional totals. Symlinks and metadata bytes are excluded. Folder scans execute away from the main UI thread.
+- Added allowlisted diagnostics export, bundled privacy/uninstall/license information, private support instructions and release notes.
+- Added clipboard read-failure regression checks, concurrent-session lifecycle checks and ended-session tombstones; wake recovery for Codex; stale Bluetooth callback rejection.
+- Added archive extraction/verification and checksum manifests, signed-feed release configuration, release-key matching, explicit stable/beta generation, appcast validation and Sparkle’s real signature-rejection tests using disposable keys.
+- Developer account inspected: the requested account has free developer access and development certificates, with no Developer ID distribution identity. Owner declined the annual membership fee. The app remains usable as a local development build.
+
 ## Ship a defined 1.0, then extend compatibility
 
 Production readiness and total feature parity are different goals. A stable 1.0 can ship with an explicit supported-device and feature list. Features that cannot be validated should stay off by default, remain clearly experimental, or be omitted from release claims. Do not claim universal media support, global Codex-session monitoring, browser download percentages, or per-app battery attribution.
@@ -25,15 +35,15 @@ Recommended first support scope: Apple Silicon Macs on a macOS version actually 
 
 | Priority | Work | Completion evidence |
 |---|---|---|
-| P0 | Developer ID Application signing and Apple notarization | A clean Mac opens the downloaded, quarantined app without bypassing Gatekeeper; nested Sparkle/helper signatures verify; notarization ticket is stapled |
+| Deferred by owner | Developer ID Application signing and Apple notarization | A clean Mac opens the downloaded, quarantined app without bypassing Gatekeeper; nested Sparkle/helper signatures verify; notarization ticket is stapled |
 | P0 | Stable bundle identity and Keychain access | Choose the long-term bundle identifier/signing team before distribution; clipboard works across a real signed upgrade without regenerating or losing its encryption key |
-| P0 | Real Sparkle distribution | Choose an HTTPS feed/download host, create and back up the Ed25519 signing key, publish a signed test feed, and upgrade an older notarized build to the next one |
-| P0 | Update failure and channel tests | Reject tampered archives; recover from interrupted/offline downloads; stable builds exclude beta releases; cancelling leaves the old app usable |
+| Deferred by owner | Real Sparkle distribution | Choose an HTTPS feed/download host, create and back up the Ed25519 signing key, publish a signed test feed, and upgrade an older notarized build to the next one |
+| P0, partially tested | Update failure and channel tests (cryptographic rejection and feed channel validation pass locally) | Reject tampered archives; recover from interrupted/offline downloads; stable builds exclude beta releases; cancelling leaves the old app usable |
 | P0 | Privacy and recovery validation | Permission denial/revocation, locked Keychain, unavailable key, corrupted archive, disk full, and restart do not freeze the app or overwrite existing data; verify clipboard exclusions and retention on a signed build |
 | P0 | Critical user journeys | Add/search/preview/copy/AirDrop/remove/undo files; encrypted clipboard pins/copy/delete; multiple Claude sessions; live usage expiry; supported terminal routing; reconnect after sleep |
 | P1 | Supported Mac/OS matrix | Notch/no notch, external display, Spaces/full screen, display changes, sleep/wake, screen sharing, Reduce Motion, Reduce Transparency, Increase Contrast, VoiceOver and keyboard-only navigation |
 | P1 | Sustained resource measurements | Record idle CPU, memory and wakeups over at least 30 minutes, then repeat with media, clipboard and folder watchers enabled; inspect growth over a day and during repeated reconnects |
-| P1 | Packaging and user support | Installer/archive and checksums, release notes, privacy statement, documented uninstall/integration removal, support contact and a reproducible problem-report template |
+| Implemented for development | Packaging and user support | Installer/archive and checksums, release notes, privacy statement, documented uninstall/integration removal, support contact and a reproducible problem-report template |
 | P1 | Release review | Audit permissions, private-API isolation, subprocess handling, retained data, dependency versions and license notices; run CI on the exact release commit |
 
 A source repository can remain private while binaries and the Sparkle feed use a separate download location. Private GitHub release assets are not an anonymous update host. An authenticated delivery design is possible, but requires its own implementation and testing. Never embed a GitHub token in the application.
@@ -44,15 +54,15 @@ A source repository can remain private while binaries and the Sparkle feed use a
 - Expand Codex session visibility only through a validated provider interface. The current standalone app-server connection retrieves usage; shared-server monitoring requires the corresponding socket.
 - Validate Music and Spotify first. Treat system MediaRemote, DisplayServices and hardware-key interception as compatibility adapters, with fallback when unavailable.
 - Test physical AirPods models and OS-reported component batteries. Do not synthesize missing readings.
-- Folder-based downloads expose bytes and speed, not reliable universal totals. Add a browser-specific adapter only where a supported source can provide completion/total size.
-- Per-app battery drain remains unimplemented. Investigate a reliable, permission-appropriate measurement source before presenting attribution to users.
+- Safari package sizes are implemented and fixture-tested; validate current Safari output during a real download. Chrome/Firefox partial files expose bytes/speed without a universal total.
+- App power estimates are implemented using OS process counters. Validate sampled values across supported macOS/hardware combinations and compare with profiling tools; full battery-drain attribution remains unavailable.
 
 ## Useful next additions
 
-After the blockers: user-selected display placement, an optional keyboard shortcut to open Crest from any app, and an opt-in diagnostics export that excludes clipboard/calendar content, prompts and credentials. Favor these reliability and accessibility improvements over adding more widgets before 1.0.
+Display placement, a global shortcut and local diagnostics export are now implemented. Next priorities are the hardware/permission matrix, longer stress tests and a real signed upgrade when the owner resumes distribution work.
 
 ## External inputs still needed
 
-Developer ID identity/signing team, an existing notarization profile, a chosen update host/domain, and a securely generated Sparkle signing key. Hardware and provider accounts are needed for the remaining integration matrix. No public release, new public repository, or hosted endpoint has been created by this UI work.
+For future public distribution only: paid membership, Developer ID identity/signing team, an existing notarization profile, a chosen update host/domain, and a securely generated/backed-up Sparkle signing key. These are deferred under the current development-only decision. Hardware and provider accounts are needed for the remaining integration matrix. No public release, new public repository, or hosted endpoint has been created by this UI work.
 
 References: [Apple materials](https://developer.apple.com/design/human-interface-guidelines/materials), [Apple notarization](https://developer.apple.com/documentation/security/notarizing-macos-software-before-distribution), [Sparkle setup and distribution](https://sparkle-project.org/documentation/). Current coverage: [FEATURES.md](FEATURES.md). Test evidence: [VALIDATION.md](VALIDATION.md).

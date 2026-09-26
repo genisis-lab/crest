@@ -104,6 +104,102 @@ func clipboardArchiveMigrationPreservesItemsAndRejectsNewerFormats() throws {
 }
 
 
+func downloadPackagesExcludeMetadataAndSymlinks() throws {
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let package = directory.appendingPathComponent("Fixture.bin.download")
+    try FileManager.default.createDirectory(at: package, withIntermediateDirectories: false)
+    try Data(repeating: 1, count: 250).write(to: package.appendingPathComponent("Fixture.bin"))
+    try PropertyListSerialization.data(fromPropertyList: ["DownloadEntryProgressTotalToLoad": 1000], format: .binary, options: 0).write(to: package.appendingPathComponent("Info.plist"))
+    try Data(repeating: 2, count: 500).write(to: package.appendingPathComponent("ResumeData"))
+    let outside = directory.appendingPathComponent("private.txt")
+    try Data(repeating: 3, count: 9000).write(to: outside)
+    try FileManager.default.createSymbolicLink(at: package.appendingPathComponent("linked.txt"), withDestinationURL: outside)
+    let result = DownloadInspection.size(at: package)
+    check(result?.bytes == 250)
+    check(result?.fraction == 0.25)
+    let partial = directory.appendingPathComponent("file.crdownload")
+    try Data(repeating: 1, count: 42).write(to: partial)
+    check(DownloadInspection.size(at: partial)?.bytes == 42)
+    check(DownloadInspection.size(at: partial)?.fraction == nil)
+    check(DownloadSize(bytes: 120, expected: 100).fraction == nil)
+    check(DownloadSize(bytes: 0, expected: -1).fraction == nil)
+    try FileManager.default.createSymbolicLink(at: directory.appendingPathComponent("secret.part"), withDestinationURL: outside)
+    check(DownloadInspection.size(at: directory.appendingPathComponent("secret.part")) == nil)
+}
+func processCountersHandleUnitsResetsAndPIDReuse() {
+    let previous = ProcessCounters(started: 1, cpuNanoseconds: 1_000_000_000, energyNanojoules: 2_000_000_000)
+    let current = ProcessCounters(started: 1, cpuNanoseconds: 2_000_000_000, energyNanojoules: 12_000_000_000)
+    let delta = ProcessActivity(previous: previous, current: current, elapsed: 5)
+    check(delta?.cpuPercent == 20)
+    check(delta?.watts == 2)
+    check(ProcessActivity(previous: previous, current: current, elapsed: 0) == nil)
+    check(ProcessActivity(previous: previous, current: current, elapsed: 120) == nil)
+    check(ProcessActivity(previous: previous, current: ProcessCounters(started: 2, cpuNanoseconds: 4_000_000_000, energyNanojoules: 10), elapsed: 5) == nil)
+    check(ProcessActivity(previous: current, current: previous, elapsed: 5) == nil)
+    check(ProcessActivity(previous: previous, current: ProcessCounters(started: 1, cpuNanoseconds: 2_000_000_000, energyNanojoules: nil), elapsed: 5)?.watts == nil)
+    check(ProcessCounters.read(pid: getpid()) != nil)
+}
+func diagnosticsUseOnlyExplicitFields() throws {
+    let report = DiagnosticsReport(appVersion: "0.3.0", build: "3", osVersion: "macOS", architecture: "Apple Silicon", displayCount: 1, hasNotchedDisplay: true,
+        features: ["codexConnected": true, "clipboard_secret_marker": true])
+    let data = try report.data()
+    let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+    check(Set(json.keys) == Set(["schemaVersion", "appVersion", "build", "osVersion", "architecture", "displayCount", "hasNotchedDisplay", "features"]))
+    check((json["features"] as? [String: Bool]) == ["codexConnected": true])
+    check(!String(decoding: data, as: UTF8.self).contains("secret_marker"))
+}
+func clipboardFailuresPreserveExistingArchive() throws {
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let file = directory.appendingPathComponent("history.aesgcm")
+    let key = SymmetricKey(size: .bits256)
+    let original = try EncryptedArchive.seal(ClipboardArchive.encode([ClipItem(text: "fixture", pinned: true)]), key: key)
+    try CrestPaths.save(original, to: file)
+    var mayCreate = true
+    let loaded = try ClipboardStore.load(from: file) { create in mayCreate = create; return key }
+    check(!mayCreate)
+    check(loaded.1.first?.pinned == true)
+    check(throws: (any Error).self) { try ClipboardStore.load(from: file) { _ in throw CocoaError(.fileReadNoPermission) } }
+    check(try Data(contentsOf: file) == original)
+    check(throws: (any Error).self) { try ClipboardStore.load(from: file) { _ in SymmetricKey(size: .bits256) } }
+    check(try Data(contentsOf: file) == original)
+    try Data("corrupt".utf8).write(to: file)
+    check(throws: (any Error).self) { try ClipboardStore.load(from: file) { create in check(!create); return key } }
+    check(try Data(contentsOf: file) == Data("corrupt".utf8))
+    var askedForKey = false
+    check(throws: (any Error).self) { try ClipboardStore.load(from: directory) { _ in askedForKey = true; return key } }
+    check(!askedForKey)
+    let new = try ClipboardStore.load(from: directory.appendingPathComponent("new.aesgcm")) { create in check(create); return key }
+    check(new.1.isEmpty)
+}
+
+func concurrentSessionsRejectDelayedEvents() {
+    var ledger = SessionLedger()
+    func event(_ id: String, _ name: String, _ timestamp: Double, provider: String = "Claude") -> BridgeEvent {
+        BridgeEvent(provider: provider, sessionID: id, event: name, tty: "/dev/ttys001", timestamp: Date(timeIntervalSince1970: timestamp))
+    }
+    check(!ledger.apply(event("one", "SessionStart", 10)))
+    check(!ledger.apply(event("two", "SessionStart", 11)))
+    check(ledger.apply(event("one", "PermissionRequest", 12)))
+    check(!ledger.apply(event("one", "PermissionRequest", 13)))
+    check(ledger.sessions.first?.sessionID == "one")
+    check(ledger.sessions.count == 2)
+    check(!ledger.apply(event("one", "PostToolUse", 14)))
+    check(ledger.sessions.first { $0.sessionID == "one" }?.state == "Working")
+    ledger.apply(event("one", "SessionEnd", 16))
+    ledger.apply(event("one", "PermissionRequest", 15))
+    check(!ledger.sessions.contains { $0.sessionID == "one" })
+    ledger.apply(event("two", "waitingOnApproval", 17, provider: "Codex"))
+    check(ledger.sessions.count == 2)
+    ledger.remove(provider: "Codex")
+    check(ledger.sessions.count == 1 && ledger.sessions[0].provider == "Claude")
+    ledger.prune(at: Date(timeIntervalSince1970: 100000))
+    check(ledger.sessions.isEmpty)
+}
+
 private var failures = 0
 private var assertions = 0
 func check(_ condition: @autoclosure () throws -> Bool, file: String = #filePath, line: Int = #line) {
@@ -128,7 +224,12 @@ let tests: [(String, () throws -> Void)] = [
     ("Hook merge and uninstall", hookInstallationIsIdempotentAndRemovalPreservesOthers),
     ("Hardware key filtering", hardwareKeysIgnoreUnrelatedEvents),
     ("Quota freshness", quotaFreshnessHandlesOfflineAndClockChanges),
-    ("Clipboard archive migration", clipboardArchiveMigrationPreservesItemsAndRejectsNewerFormats)
+    ("Clipboard archive migration", clipboardArchiveMigrationPreservesItemsAndRejectsNewerFormats),
+    ("Safari download packages", downloadPackagesExcludeMetadataAndSymlinks),
+    ("Process energy counters", processCountersHandleUnitsResetsAndPIDReuse),
+    ("Diagnostics privacy", diagnosticsUseOnlyExplicitFields),
+    ("Clipboard storage recovery", clipboardFailuresPreserveExistingArchive),
+    ("Concurrent session lifecycle", concurrentSessionsRejectDelayedEvents)
 ]
 for (name, test) in tests { let before = failures; do { try test() } catch { failures += 1; print("FAIL \(name): \(error)") }; if failures == before { print("PASS \(name)") } }
 print("\(tests.count) checks, \(assertions) assertions, \(failures) failures")

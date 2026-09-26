@@ -7,3 +7,4 @@ BIN="$(swift build --package-path "$PACKAGE" --scratch-path "$BUILD" --build-sys
 python3 "$ROOT/scripts/test-bridge.py" "$BIN/crest-bridge"
 
 python3 "$ROOT/scripts/test-release.py"
+python3 "$ROOT/scripts/test-sparkle.py" "$BUILD/artifacts/sparkle/Sparkle/bin"

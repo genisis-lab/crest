@@ -18,6 +18,7 @@ with open(sys.argv[2], 'rb') as f:
     plist = plistlib.load(f)
 plist.update(SUFeedURL=config['feed_url'], SUPublicEDKey=config['sparkle_public_key'],
              CFBundleVersion=str(config['build']), CFBundleShortVersionString=config['version'],
-             SUEnableAutomaticChecks=True)
+             SUEnableAutomaticChecks=True, SURequireSignedFeed=True,
+             SUVerifyUpdateBeforeExtraction=True, SUEnableSystemProfiling=False)
 with open(sys.argv[2], 'wb') as f:
     plistlib.dump(plist, f)

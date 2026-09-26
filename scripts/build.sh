@@ -12,6 +12,7 @@ cp "$BIN/Crest" "$APP/Contents/MacOS/Crest"
 cp "$BIN/crest-bridge" "$APP/Contents/Helpers/crest-bridge"
 cp "$PACKAGE/Resources/Info.plist" "$APP/Contents/Info.plist"
 if [[ -f "$PACKAGE/Resources/AppIcon.icns" ]]; then cp "$PACKAGE/Resources/AppIcon.icns" "$APP/Contents/Resources/"; fi
+for document in Privacy Uninstall ThirdPartyNotices; do cp "$PACKAGE/Resources/$document.txt" "$APP/Contents/Resources/"; done
 SPARKLE="$BUILD/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework"
 ditto "$SPARKLE" "$APP/Contents/Frameworks/Sparkle.framework"
 if [[ -n "${CREST_RELEASE_CONFIG:-}" ]]; then
@@ -23,5 +24,6 @@ xattr -dr com.apple.ResourceFork "$APP" 2>/dev/null || true
 codesign --force --deep --sign - "$APP"
 codesign --verify --deep --strict "$APP"
 ditto -c -k --keepParent "$APP" "$DIST/Crest.zip"
+python3 "$ROOT/scripts/verify-package.py" "$DIST/Crest.zip"
 printf '%s\n' "$APP" > "$DIST/app-path.txt"
 printf 'Built and verified %s\nPackaged %s/Crest.zip\n' "$APP" "$DIST"

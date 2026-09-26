@@ -23,8 +23,10 @@ import CrestCore
     private var shared = false
     private var connectionGeneration = 0
     private var startedAt = Date.distantPast
+    private var lastThreadRequest = Date.distantPast
     private var eventWatcher: DispatchSourceFileSystemObject?
     private var inboxFD: Int32 = -1
+    private var ledger = SessionLedger()
 
     init() {
         try? CrestPaths.prepare(CrestPaths.inbox)
@@ -39,7 +41,7 @@ import CrestCore
         timer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.drainInbox()
-                self?.sessions.removeAll { Date().timeIntervalSince($0.timestamp) > 86400 }
+                self?.pruneSessions()
             }
         }
     }
@@ -59,19 +61,14 @@ import CrestCore
         if let quota = event.quota {
             if event.provider == "Claude", quota.receivedAt >= (claude?.receivedAt ?? .distantPast) { claude = quota }
         }
-        guard event.nextState != nil else { return }
-        let id = event.provider + ":" + event.sessionID
-        let previous = sessions.first { $0.id == id }
-        guard event.timestamp >= (previous?.timestamp ?? .distantPast) else { return }
-        let session = AgentSession(event, previous: previous)
-        sessions.removeAll { $0.id == id }
-        if session.state != "Ended" { sessions.append(session) }
-        sessions.sort { ($0.state == "Needs you" ? 1 : 0, $0.timestamp) > ($1.state == "Needs you" ? 1 : 0, $1.timestamp) }
-        if session.state == "Needs you", previous?.state != "Needs you" { onAttention?("\(event.provider) needs you") }
+        let attention = ledger.apply(event); sessions = ledger.sessions
+        if attention { onAttention?("\(event.provider) needs you") }
     }
+    private func pruneSessions() { ledger.prune(); sessions = ledger.sessions }
+    private func clearCodexSessions() { ledger.remove(provider: "Codex"); sessions = ledger.sessions }
     static func findCodex() -> String? {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
-        return [home + "/.local/bin/codex", "/opt/homebrew/bin/codex", "/usr/local/bin/codex", "/Applications/Codex.app/Contents/Resources/codex"].first { FileManager.default.isExecutableFile(atPath: $0) }
+        return [home + "/.local/bin/codex", "/opt/homebrew/bin/codex", "/usr/local/bin/codex", "/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex", "/Applications/Codex.app/Contents/Resources/codex"].first { FileManager.default.isExecutableFile(atPath: $0) }
     }
     func connect(path: String, socket: String = "") {
         disconnect()
@@ -90,7 +87,7 @@ import CrestCore
         p.terminationHandler = { [weak self] ended in
             Task { @MainActor in
                 guard self?.process === ended else { return }
-                self?.connected = false; self?.refreshing = false; self?.sessions.removeAll { $0.provider == "Codex" }; self?.status = "Codex disconnected. Reconnect in Settings."; self?.pollTimer?.invalidate()
+                self?.connected = false; self?.refreshing = false; self?.clearCodexSessions(); self?.status = "Codex disconnected. Reconnect in Settings."; self?.pollTimer?.invalidate()
             }
         }
         do {
@@ -101,6 +98,7 @@ import CrestCore
                     guard let self else { return }
                     if !self.connected && Date().timeIntervalSince(self.startedAt) > 30 { self.disconnect(); self.status = "Codex did not complete its handshake. Reconnect or check the executable."; return }
                     if self.refreshing && Date().timeIntervalSince(self.lastSent) > 30 { self.pendingQuota.removeAll(); self.refreshing = false; self.status = "Usage refresh timed out. Try Refresh again." }
+                    if !self.pendingThreads.isEmpty && Date().timeIntervalSince(self.lastThreadRequest) > 30 { self.pendingThreads.removeAll() }
                     guard self.connected else { return }
                     if Date().timeIntervalSince(self.lastSent) > 300 { self.refresh() }
                     if self.shared { self.readThreads() }
@@ -115,7 +113,7 @@ import CrestCore
         try? input?.close(); input = nil
         if old?.isRunning == true { old?.terminate() }
         connected = false; refreshing = false; buffer.removeAll(); pendingQuota.removeAll(); pendingThreads.removeAll()
-        sessions.removeAll { $0.provider == "Codex" }; status = "Codex disconnected."
+        clearCodexSessions(); status = "Codex disconnected."
     }
     func refresh() {
         guard connected && !refreshing else { return }
@@ -124,12 +122,17 @@ import CrestCore
     }
     private func readThreads() {
         guard pendingThreads.isEmpty else { return }
-        requestID += 1; pendingThreads.insert(requestID)
+        requestID += 1; pendingThreads.insert(requestID); lastThreadRequest = Date()
         send(["id": requestID, "method": "thread/list", "params": ["limit": 50, "sortKey": "updated_at", "archived": false]])
     }
     private func send(_ message: [String: Any]) {
         guard let data = try? JSONSerialization.data(withJSONObject: message) else { return }
         do { try input?.write(contentsOf: data + Data([10])) } catch { status = "Codex connection closed." }
+    }
+    func resumeAfterWake() {
+        guard UserDefaults.standard.bool(forKey: "codexEnabled") else { return }
+        if connected { pendingQuota.removeAll(); pendingThreads.removeAll(); refreshing = false; refresh(); if shared { readThreads() } }
+        else { connect(path: UserDefaults.standard.string(forKey: "codexPath") ?? Self.findCodex() ?? "", socket: UserDefaults.standard.string(forKey: "codexSocket") ?? "") }
     }
     private func receive(_ data: Data) {
         buffer.append(data)

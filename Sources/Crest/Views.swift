@@ -57,7 +57,7 @@ struct NotchView: View {
         .tint(CrestStyle.blue)
         .onHover { inside in
             hovering = inside; collapse?.cancel()
-            if inside { model.expanded = true }
+            if inside { model.keyboardOpen = false; model.expanded = true }
             else { scheduleCollapse() }
         }
         .onDrop(of: [.fileURL], isTargeted: $dropping) { providers in
@@ -71,14 +71,14 @@ struct NotchView: View {
         .onChange(of: dropping) { _, value in if value { collapse?.cancel(); model.expanded = true } else if !hovering { scheduleCollapse() } }
         .onChange(of: model.interacting) { _, value in if value { collapse?.cancel() } else if !hovering { scheduleCollapse() } }
         .onChange(of: model.pinned) { _, value in if value { collapse?.cancel() } else if !hovering { scheduleCollapse() } }
-        .onExitCommand { model.pinned = false; model.expanded = false }
+        .onExitCommand { model.pinned = false; model.keyboardOpen = false; model.expanded = false }
     }
     private func scheduleCollapse() {
         collapse?.cancel()
-        guard !model.pinned && !model.onboarding && !model.interacting && !dropping else { return }
+        guard !model.pinned && !model.keyboardOpen && !model.onboarding && !model.interacting && !dropping else { return }
         collapse = Task {
             try? await Task.sleep(for: .milliseconds(120))
-            guard !Task.isCancelled && !hovering && !model.pinned && !model.interacting && !dropping else { return }
+            guard !Task.isCancelled && !hovering && !model.pinned && !model.keyboardOpen && !model.interacting && !dropping else { return }
             model.expanded = false
         }
     }
@@ -106,7 +106,7 @@ struct NotchView: View {
                 .buttonStyle(QuietButtonStyle(selected: model.pinned)).help(model.pinned ? "Unpin Crest (⌘P)" : "Keep open (⌘P)").accessibilityLabel(model.pinned ? "Unpin Crest" : "Keep Crest open").keyboardShortcut("p")
             Button { model.openSettings(.general) } label: { Image(systemName: "gearshape").frame(width: 14, height: 14) }
                 .buttonStyle(QuietButtonStyle()).help("Settings").accessibilityLabel("Settings")
-            Button { model.pinned = false; model.expanded = false } label: { Image(systemName: "chevron.up").frame(width: 14, height: 14) }
+            Button { model.pinned = false; model.keyboardOpen = false; model.expanded = false } label: { Image(systemName: "chevron.up").frame(width: 14, height: 14) }
                 .buttonStyle(QuietButtonStyle()).help("Collapse (Escape)").accessibilityLabel("Collapse")
         }.padding(.horizontal, 19).padding(.top, 8).padding(.bottom, 12)
     }
@@ -131,7 +131,7 @@ struct NotchView: View {
             Image(systemName: model.notice == nil ? "lock" : "checkmark.circle").font(.system(size: 9))
             Text(model.notice ?? "On your Mac").lineLimit(1)
             Spacer()
-            Text(model.pinned ? "Pinned" : "Hover to keep open")
+            Text(model.pinned ? "Pinned" : model.keyboardOpen ? "Escape to close" : "Hover to keep open")
         }.font(.system(size: 10)).foregroundStyle(CrestStyle.tertiary).padding(.horizontal, 20).padding(.vertical, 11)
     }
     private var welcome: some View {
@@ -197,9 +197,20 @@ struct OverviewView: View {
                 }
             }
             if let meeting = model.calendar.meetings.first { MeetingRow(meeting: meeting) }
+            if model.energy.enabled { AppEnergyCard(service: model.energy) }
             ForEach(model.downloads.downloads) { item in
                 Card {
-                    HStack { Image(systemName: "arrow.down.circle.fill").foregroundStyle(CrestStyle.blue); VStack(alignment: .leading, spacing: 4) { Text(item.path).font(.system(size: 12, weight: .medium)).lineLimit(1); Text("\(ByteCountFormatter.string(fromByteCount: item.bytes, countStyle: .file)) received · \(ByteCountFormatter.string(fromByteCount: Int64(item.bytesPerSecond), countStyle: .file))/s").font(.caption).foregroundStyle(CrestStyle.secondary) }; Spacer(); ProgressView().controlSize(.small) }
+                    HStack {
+                        Image(systemName: "arrow.down.circle.fill").foregroundStyle(CrestStyle.blue)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(item.path).font(.system(size: 12, weight: .medium)).lineLimit(1)
+                            Text("\(ByteCountFormatter.string(fromByteCount: item.bytes, countStyle: .file)) received · \(ByteCountFormatter.string(fromByteCount: Int64(item.bytesPerSecond), countStyle: .file))/s").font(.caption).foregroundStyle(CrestStyle.secondary)
+                            if let fraction = item.fraction { ProgressView(value: fraction).accessibilityLabel("Download progress") }
+                        }
+                        Spacer()
+                        if let fraction = item.fraction { Text(fraction, format: .percent.precision(.fractionLength(0))).font(.caption).monospacedDigit() }
+                        else { Image(systemName: "arrow.down").foregroundStyle(CrestStyle.secondary).help("Total size unavailable") }
+                    }
                 }
             }
             ForEach(model.bluetooth.devices) { device in Card { Label { VStack(alignment: .leading, spacing: 3) { Text(device.name).font(.system(size: 12, weight: .medium)); Text(device.readings.isEmpty ? "Connected · Battery unavailable" : device.readings.joined(separator: " · ")).font(.caption).foregroundStyle(CrestStyle.secondary) } } icon: { Image(systemName: "airpodspro").font(.title2) } } }
@@ -214,6 +225,25 @@ struct OverviewView: View {
                 if model.brightness.available { HStack(spacing: 9) { Image(systemName: "sun.max.fill").frame(width: 18); Slider(value: Binding(get: { Double(model.brightness.value) }, set: { model.brightness.set(Float($0)) })).tint(.white).accessibilityLabel("Brightness"); Text("\(Int((model.brightness.value * 100).rounded()))").font(.system(size: 10)).monospacedDigit().frame(width: 22) } }
                 else { Text(model.power.time).font(.system(size: 11)).foregroundStyle(CrestStyle.secondary).lineLimit(2) }
             }.frame(height: 108, alignment: .top)
+        }
+    }
+}
+struct AppEnergyCard: View {
+    @ObservedObject var service: AppEnergyService
+    var body: some View {
+        Card {
+            VStack(alignment: .leading, spacing: 10) {
+                Label("App power", systemImage: "bolt.leaf").font(.system(size: 12, weight: .semibold))
+                ForEach(service.readings.prefix(5)) { reading in
+                    HStack {
+                        Text(reading.name).lineLimit(1)
+                        Spacer()
+                        if let watts = reading.watts { Text("\(watts, specifier: "%.2f") W").monospacedDigit() }
+                        else { Text("\(reading.cpuPercent, specifier: "%.1f")% CPU").monospacedDigit().foregroundStyle(CrestStyle.secondary) }
+                    }.font(.system(size: 11)).help("\(reading.processCount) measured processes. Estimate excludes unreported energy.")
+                }
+                Text(service.status).font(.system(size: 10)).foregroundStyle(CrestStyle.secondary)
+            }
         }
     }
 }

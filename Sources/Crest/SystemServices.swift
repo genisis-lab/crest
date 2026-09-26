@@ -157,13 +157,15 @@ struct Earbud: Identifiable { var id: String { name }; var name: String; var rea
     private var timer: Timer?
     private var busy = false
     private var enabled = false
+    private var generation = 0
     func enable(_ value: Bool) {
-        timer?.invalidate(); timer = nil; enabled = value
+        generation += 1; timer?.invalidate(); timer = nil; enabled = value
         guard value else { devices = []; status = "Bluetooth monitoring off"; return }
         refresh(); timer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in Task { @MainActor in self?.refresh() } }
     }
     func refresh() {
         guard !busy, enabled else { return }; busy = true
+        let requestedGeneration = generation
         Task { [weak self] in
             let captured = await Task.detached {
                 let p = Process(); let pipe = Pipe(); p.executableURL = URL(fileURLWithPath: "/usr/sbin/system_profiler"); p.arguments = ["SPBluetoothDataType", "-json"]; p.standardOutput = pipe; p.standardError = FileHandle.nullDevice
@@ -174,7 +176,7 @@ struct Earbud: Identifiable { var id: String { name }; var name: String; var rea
                 }
                 return [Earbud]()
             }.value
-            guard let self else { return }; self.busy = false; guard self.enabled else { return }
+            guard let self else { return }; self.busy = false; guard self.enabled && self.generation == requestedGeneration else { return }
             for d in captured where d.connected && !self.devices.contains(where: { $0.name == d.name && $0.connected }) { self.onConnect?(d.name + " connected") }
             self.devices = captured; self.status = captured.isEmpty ? "No connected battery-reporting devices. Some AirPods readings are unavailable on this macOS version." : "OS-reported readings · refreshed every minute"
         }

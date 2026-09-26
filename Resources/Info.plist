@@ -1,22 +1,44 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict>
-<key>CFBundleName</key><string>Crest</string>
-<key>CFBundleDisplayName</key><string>Crest</string>
-<key>CFBundleIdentifier</key><string>app.crest.mac</string>
-<key>CFBundleVersion</key><string>2</string>
-<key>CFBundleShortVersionString</key><string>0.2.0</string>
-<key>CFBundleExecutable</key><string>Crest</string>
-<key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleIconFile</key><string>AppIcon</string>
-<key>LSMinimumSystemVersion</key><string>14.0</string>
-<key>LSUIElement</key><true/>
-<key>NSHighResolutionCapable</key><true/>
-<key>NSPrincipalClass</key><string>NSApplication</string>
-<key>NSCalendarsFullAccessUsageDescription</key><string>Crest shows upcoming meetings and lets you open their meeting links. Your calendar remains on this Mac.</string>
-<key>NSAppleEventsUsageDescription</key><string>Crest controls your selected music player and returns you to the terminal session that needs attention.</string>
-<key>NSBluetoothAlwaysUsageDescription</key><string>Crest shows connection and battery information for your Bluetooth headphones.</string>
-<key>SUEnableAutomaticChecks</key><false/>
-<key>SUVerifyUpdateBeforeExtraction</key><true/>
-<key>SUAllowsAutomaticUpdates</key><true/>
-</dict></plist>
+<plist version="1.0">
+<dict>
+	<key>CFBundleDisplayName</key>
+	<string>Crest</string>
+	<key>CFBundleExecutable</key>
+	<string>Crest</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
+	<key>CFBundleIdentifier</key>
+	<string>app.crest.mac</string>
+	<key>CFBundleName</key>
+	<string>Crest</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.3.0</string>
+	<key>CFBundleVersion</key>
+	<string>3</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>14.0</string>
+	<key>LSUIElement</key>
+	<true/>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>Crest controls your selected music player and returns you to the terminal session that needs attention.</string>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>Crest shows connection and battery information for your Bluetooth headphones.</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Crest shows upcoming meetings and lets you open their meeting links. Your calendar remains on this Mac.</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSPrincipalClass</key>
+	<string>NSApplication</string>
+	<key>SUAllowsAutomaticUpdates</key>
+	<true/>
+	<key>SUEnableAutomaticChecks</key>
+	<false/>
+	<key>SUEnableSystemProfiling</key>
+	<false/>
+	<key>SUVerifyUpdateBeforeExtraction</key>
+	<true/>
+</dict>
+</plist>

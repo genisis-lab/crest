@@ -17,6 +17,9 @@ import ServiceManagement
     let bluetooth = BluetoothService()
     let media = MediaService()
     let updates = UpdateService()
+    let displays = DisplayPlacement()
+    let shortcut = GlobalShortcut()
+    let energy = AppEnergyService()
     @Published var expanded = false
     // Pinning is session-only and intentionally off on every launch.
     @Published var pinned = false
@@ -28,13 +31,14 @@ import ServiceManagement
     @Published var collapsedWidth: CGFloat = 290
     @Published var cutoutWidth: CGFloat = 180
     @Published var interacting = false
+    @Published var keyboardOpen = false
     @Published var settingsSection: SettingsSection = .general
     @Published var onboarding = !UserDefaults.standard.bool(forKey: "onboarded")
     var showSettings: (() -> Void)?
     private var cancellables = Set<AnyCancellable>()
     private var noticeTask: Task<Void, Never>?
     init() {
-        for publisher in [agents.objectWillChange, tray.objectWillChange, clipboard.objectWillChange, downloads.objectWillChange, screenshots.objectWillChange, power.objectWillChange, audio.objectWillChange, brightness.objectWillChange, hardwareKeys.objectWillChange, calendar.objectWillChange, bluetooth.objectWillChange, media.objectWillChange, updates.objectWillChange] {
+        for publisher in [agents.objectWillChange, tray.objectWillChange, clipboard.objectWillChange, downloads.objectWillChange, screenshots.objectWillChange, power.objectWillChange, audio.objectWillChange, brightness.objectWillChange, hardwareKeys.objectWillChange, calendar.objectWillChange, bluetooth.objectWillChange, media.objectWillChange, updates.objectWillChange, displays.objectWillChange, shortcut.objectWillChange, energy.objectWillChange] {
             publisher.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &cancellables)
         }
         agents.onAttention = { [weak self] text in self?.alert(text, urgent: true) }
@@ -48,6 +52,7 @@ import ServiceManagement
         if UserDefaults.standard.bool(forKey: "codexEnabled") { agents.connect(path: UserDefaults.standard.string(forKey: "codexPath") ?? AgentService.findCodex() ?? "", socket: UserDefaults.standard.string(forKey: "codexSocket") ?? "") }
         media.configure(enabled: UserDefaults.standard.bool(forKey: "mediaEnabled"), player: UserDefaults.standard.string(forKey: "mediaPlayer") ?? "System")
         brightness.enable(UserDefaults.standard.bool(forKey: "brightnessEnabled")); bluetooth.enable(UserDefaults.standard.bool(forKey: "bluetoothEnabled"))
+        energy.configure(UserDefaults.standard.bool(forKey: "appEnergyEnabled"))
         screenshots.restore(tray: tray, screenshots: true); downloads.restore(tray: tray, screenshots: false)
     }
     func alert(_ text: String, urgent: Bool = false) {
@@ -78,7 +83,7 @@ import ServiceManagement
     override var canBecomeMain: Bool { false }
 }
 
-@MainActor final class AppDelegate: NSObject, NSApplicationDelegate {
+@MainActor final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     let model = AppModel()
     private var panel: NotchPanel!
     private var settingsWindow: NSWindow?
@@ -99,11 +104,15 @@ import ServiceManagement
         panel.isOpaque = false; panel.backgroundColor = .clear; panel.hasShadow = true
         panel.level = .statusBar; panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary]; panel.hidesOnDeactivate = false; panel.isMovable = false
         panel.contentView = NSHostingView(rootView: NotchView(model: model))
+        panel.delegate = self
         model.showSettings = { [weak self] in self?.settings() }
+        model.displays.onChange = { [weak self] in self?.layout() }
+        model.shortcut.onPress = { [weak self] in self?.toggle() }
+        model.shortcut.configure(UserDefaults.standard.bool(forKey: "globalShortcutEnabled"))
         model.$expanded.combineLatest(model.$notice).sink { [weak self] _, _ in DispatchQueue.main.async { self?.layout() } }.store(in: &sinks)
         model.$tab.combineLatest(model.$onboarding).sink { [weak self] _, _ in DispatchQueue.main.async { self?.layout() } }.store(in: &sinks)
         NotificationCenter.default.addObserver(self, selector: #selector(displayChanged), name: NSApplication.didChangeScreenParametersNotification, object: nil)
-        NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(displayChanged), name: NSWorkspace.didWakeNotification, object: nil)
+        NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(didWake), name: NSWorkspace.didWakeNotification, object: nil)
         NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(checkVisibility), name: NSWorkspace.activeSpaceDidChangeNotification, object: nil)
         visibilityTimer = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in Task { @MainActor in self?.checkVisibility() } }
         layout(); panel.orderFrontRegardless()
@@ -113,7 +122,7 @@ import ServiceManagement
         if ProcessInfo.processInfo.arguments.contains("--smoke-test") { DispatchQueue.main.asyncAfter(deadline: .now() + 3) { NSApp.terminate(nil) } }
     }
     func layout() {
-        guard panel != nil, let screen = NSScreen.screens.first(where: { $0.safeAreaInsets.top > 0 }) ?? NSScreen.main else { return }
+        guard panel != nil, let screen = model.displays.screen else { return }
         chosenScreen = screen
         let left = screen.auxiliaryTopLeftArea, right = screen.auxiliaryTopRightArea
         let cutoutWidth = max(180, (right?.minX ?? 0) - (left?.maxX ?? 0))
@@ -126,7 +135,8 @@ import ServiceManagement
         let rect = NSRect(x: screen.frame.midX - width / 2, y: screen.frame.maxY - height, width: width, height: height)
         spring.move(panel, to: rect, immediately: panel.frame.width == 0 || NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
     }
-    @objc func displayChanged() { layout(); checkVisibility() }
+    @objc func displayChanged() { model.displays.refresh(); layout(); checkVisibility() }
+    @objc func didWake() { displayChanged(); model.agents.resumeAfterWake(); model.power.refresh(); model.calendar.refresh(); model.audio.refresh() }
     @objc func checkVisibility() {
         guard panel != nil else { return }
         var hide = false
@@ -143,7 +153,15 @@ import ServiceManagement
         }
         if hide { panel.orderOut(nil) } else if !panel.isVisible { panel.orderFrontRegardless() }
     }
-    @objc func toggle() { model.expanded.toggle(); if model.expanded { panel.makeKeyAndOrderFront(nil) } }
+    @objc func toggle() {
+        model.expanded.toggle(); model.keyboardOpen = model.expanded
+        if model.expanded { NSApp.activate(ignoringOtherApps: true); panel.makeKeyAndOrderFront(nil) }
+    }
+    func windowDidResignKey(_ notification: Notification) {
+        if model.keyboardOpen && !model.pinned && !model.interacting {
+            model.keyboardOpen = false; model.expanded = false
+        }
+    }
     @objc func settings() {
         if settingsWindow == nil {
             let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 800, height: 660), styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
@@ -153,5 +171,5 @@ import ServiceManagement
     }
     @objc func updates() { if model.updates.configured { model.updates.check() } else { model.openSettings(.updates) } }
     @objc func quit() { model.agents.disconnect(); NSApp.terminate(nil) }
-    func applicationWillTerminate(_ notification: Notification) { model.agents.disconnect() }
+    func applicationWillTerminate(_ notification: Notification) { model.agents.disconnect(); model.shortcut.stop() }
 }

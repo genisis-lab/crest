@@ -2,6 +2,8 @@
 
 The development app has no `SUFeedURL` or `SUPublicEDKey`; it never checks another product's feed. `UpdateService` enables Sparkle only when the bundle includes an HTTPS feed URL and a valid 32-byte public key.
 
+The owner has chosen development-only builds to avoid paid enrollment for now. No live feed, signing key or notarized release is being created. The procedure below is retained for a future distribution decision.
+
 ## Prerequisites
 
 1. A Developer ID Application identity. Apple Development certificates alone are not a substitute for outside-the-App-Store distribution.
@@ -17,8 +19,8 @@ Create a local, git-ignored `release-config.json`:
 {
   "feed_url": "https://YOUR-UPDATE-HOST/appcast.xml",
   "sparkle_public_key": "YOUR-BASE64-PUBLIC-KEY",
-  "version": "0.1.0",
-  "build": 1
+  "version": "0.3.0",
+  "build": 3
 }
 ```
 
@@ -29,10 +31,12 @@ export CREST_SIGN_IDENTITY='Developer ID Application: YOUR IDENTITY'
 export CREST_NOTARY_PROFILE='YOUR-EXISTING-PROFILE'
 export CREST_RELEASE_CONFIG="$PWD/release-config.json"
 export CREST_DOWNLOAD_PREFIX='https://YOUR-UPDATE-HOST/releases/'
+export CREST_SPARKLE_ACCOUNT='YOUR-EXISTING-SPARKLE-KEYCHAIN-ACCOUNT'
+export CREST_RELEASE_CHANNEL='stable' # or beta
 bash scripts/release.sh
 ```
 
-Review generated release notes/appcast before uploading. Confirm archive URLs match their actual destinations and every enclosure has a Sparkle signature. Use `sparkle:channel` = `beta` for beta feed entries. Stable clients request no extra channels; beta clients also accept beta entries.
+The script compares the configured public key with the chosen Keychain key before notarizing, requires a signed feed, verifies the generated feed and validates channel/archive metadata. Review generated release notes/appcast before uploading. Confirm archive URLs match their actual destinations and every enclosure has a Sparkle signature. Use `sparkle:channel` = `beta` for beta feed entries. Stable clients request no extra channels; beta clients also accept beta entries.
 
 ## Required release checks
 
@@ -46,3 +50,7 @@ Review generated release notes/appcast before uploading. Confirm archive URLs ma
 The current environment has development signing identities but no verified Developer ID Application identity. No public release or live update was published in this implementation session.
 
 Source: [Sparkle documentation](https://sparkle-project.org/documentation/).
+
+## Local verification without enrollment
+
+`scripts/test-sparkle.py` uses disposable private seeds in a temporary directory, never the user Keychain. It signs/verifies an archive and feed with Sparkle 2.10 and verifies rejection of changed archives, a wrong key and changed feeds. `test-release.py` checks invalid configuration leaves the target bundle unchanged and validates stable/beta appcast metadata. These tests do not replace an actual update installation, offline/cancellation tests or Developer ID continuity checks.

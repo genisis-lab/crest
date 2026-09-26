@@ -95,15 +95,14 @@ enum ClipboardKey {
         loadGeneration += 1; let generation = loadGeneration
         timer?.invalidate(); timer = nil
         if !value { enabled = false; loading = false; key = nil; items = []; UserDefaults.standard.set(false, forKey: "clipboardEnabled"); return }
-        loading = true; enabled = false; error = nil
+        loading = true; enabled = false; error = nil; key = nil; items = []
         let archive = file
         Task { [self] in
             let result = await Task.detached { () -> Result<(SymmetricKey, [ClipItem]), Error> in
                 Result {
-                    let exists = FileManager.default.fileExists(atPath: archive.path)
-                    let key = try ClipboardKey.load(create: !exists, allowAuthentication: allowAuthentication)
-                    let items = exists ? try ClipboardArchive.decode(EncryptedArchive.open(Data(contentsOf: archive), key: key)) : []
-                    return (key, items)
+                    try ClipboardStore.load(from: archive) { create in
+                        try ClipboardKey.load(create: create, allowAuthentication: allowAuthentication)
+                    }
                 }
             }.value
             guard loadGeneration == generation else { return }
@@ -173,16 +172,20 @@ struct DownloadActivity: Identifiable {
     var path: String
     var bytes: Int64
     var bytesPerSecond: Double
+    var expectedBytes: Int64?
+    var fraction: Double? { DownloadSize(bytes: bytes, expected: expectedBytes).fraction }
 }
 @MainActor final class FolderService: ObservableObject {
     @Published var downloads: [DownloadActivity] = []
     @Published var status = "Choose folders in Settings to watch screenshots and downloads."
     private var snapshots: [String: (Int64, Date)] = [:]
     private var known = Set<String>()
-    private var pending = Set<String>()
     private var timer: Timer?
     private var folder: URL?
     private var screenshots = false
+    private var generation = 0
+    private var scanning = false
+    private var initialScan = true
     private var preferenceKey: String?
     private weak var tray: TrayService?
     func choose(tray: TrayService, screenshots: Bool) {
@@ -194,7 +197,7 @@ struct DownloadActivity: Identifiable {
         stop(); self.tray = tray; folder = url; self.screenshots = screenshots
         preferenceKey = screenshots ? "screenshotsBookmark" : "downloadsBookmark"
         if let bookmark = try? url.bookmarkData(options: .minimalBookmark), let preferenceKey { UserDefaults.standard.set(bookmark, forKey: preferenceKey) }
-        known = Set(((try? FileManager.default.contentsOfDirectory(atPath: url.path)) ?? []))
+        known = []; initialScan = true
         status = "Watching \(url.lastPathComponent)"; scan()
         timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in Task { @MainActor in self?.scan() } }
     }
@@ -205,30 +208,57 @@ struct DownloadActivity: Identifiable {
         if let url = try? URL(resolvingBookmarkData: data, options: .withoutUI, bookmarkDataIsStale: &stale) { start(url, tray: tray, screenshots: screenshots) }
         else { status = "Saved folder is unavailable. Choose it again." }
     }
-    func stop() { timer?.invalidate(); timer = nil; folder = nil; downloads = []; snapshots = [:]; pending = []; status = "Folder watching off"; if let preferenceKey { UserDefaults.standard.removeObject(forKey: preferenceKey) }; preferenceKey = nil }
+    func stop() { timer?.invalidate(); timer = nil; folder = nil; downloads = []; snapshots = [:]; generation += 1; status = "Folder watching off"; if let preferenceKey { UserDefaults.standard.removeObject(forKey: preferenceKey) }; preferenceKey = nil }
     private func scan() {
-        guard let folder else { return }
-        guard let urls = try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: [.fileSizeKey, .isRegularFileKey, .isSymbolicLinkKey], options: .skipsHiddenFiles) else { status = "Folder access unavailable. Choose the folder again."; return }
-        var active: [DownloadActivity] = []; let now = Date(); var next: [String: (Int64, Date)] = [:]
-        let names = Set(urls.map(\.lastPathComponent))
-        for url in urls {
-            let name = url.lastPathComponent
-            let temporary = ["crdownload", "part", "download"].contains(url.pathExtension)
-            let values = try? url.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey, .isSymbolicLinkKey])
-            guard values?.isSymbolicLink != true else { continue }
-            let size = Int64(values?.fileSize ?? 0); let previous = snapshots[name]; next[name] = (size, now)
-            if temporary && !screenshots && values?.isRegularFile == true {
-                let speed = previous.map { max(0, Double(size - $0.0) / max(0.1, now.timeIntervalSince($0.1))) } ?? 0
-                active.append(DownloadActivity(path: name, bytes: size, bytesPerSecond: speed)); pending.insert(url.deletingPathExtension().lastPathComponent)
-            } else if !known.contains(name), values?.isRegularFile == true {
-                let isScreenshot: Bool = {
-                    guard screenshots else { return true }
-                    if let item = MDItemCreate(nil, url.path as CFString), let value = MDItemCopyAttribute(item, "kMDItemIsScreenCapture" as CFString) as? Bool, value { return true }
-                    return (name.hasPrefix("Screenshot ") || name.hasPrefix("Screen Shot ")) && ["png", "jpg", "jpeg", "heic"].contains(url.pathExtension.lowercased())
-                }()
-                if previous?.0 == size, size > 0, isScreenshot { tray?.add([url]); known.insert(name); pending.remove(name) }
+        guard let folder, !scanning else { return }
+        scanning = true
+        let requestedGeneration = generation
+        let isScreenshots = screenshots
+        Task { [weak self] in
+            let captured = await Task.detached { () -> [FolderEntry]? in
+                guard let urls = try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: [.fileSizeKey, .isRegularFileKey, .isSymbolicLinkKey], options: .skipsHiddenFiles) else { return nil }
+                return urls.compactMap { url in
+                    guard let values = try? url.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey, .isSymbolicLinkKey]), values.isSymbolicLink != true else { return nil }
+                    let partial = isScreenshots ? nil : DownloadInspection.size(at: url)
+                    guard values.isRegularFile == true || partial != nil else { return nil }
+                    var screenshot = !isScreenshots
+                    if isScreenshots {
+                        if let item = MDItemCreate(nil, url.path as CFString), let value = MDItemCopyAttribute(item, "kMDItemIsScreenCapture" as CFString) as? Bool, value { screenshot = true }
+                        else { screenshot = (url.lastPathComponent.hasPrefix("Screenshot ") || url.lastPathComponent.hasPrefix("Screen Shot ")) && ["png", "jpg", "jpeg", "heic"].contains(url.pathExtension.lowercased()) }
+                    }
+                    return FolderEntry(url: url, bytes: partial?.bytes ?? Int64(values.fileSize ?? 0), partial: partial, screenshot: screenshot)
+                }
+            }.value
+            guard let self else { return }
+            scanning = false
+            guard requestedGeneration == generation else { return }
+            guard let entries = captured else { downloads = []; status = "Folder access unavailable. Choose the folder again."; return }
+            var active: [DownloadActivity] = []
+            let now = Date()
+            var next: [String: (Int64, Date)] = [:]
+            let names = Set(entries.map { $0.url.lastPathComponent })
+            if initialScan { known = names; initialScan = false }
+            for entry in entries {
+                let name = entry.url.lastPathComponent
+                let previous = snapshots[name]
+                next[name] = (entry.bytes, now)
+                if let partial = entry.partial {
+                    let speed = previous.map { max(0, Double(entry.bytes - $0.0) / max(0.1, now.timeIntervalSince($0.1))) } ?? 0
+                    active.append(DownloadActivity(path: name, bytes: entry.bytes, bytesPerSecond: speed, expectedBytes: partial.expected))
+                } else if !DownloadInspection.temporaryExtensions.contains(entry.url.pathExtension.lowercased()), !known.contains(name),
+                          previous?.0 == entry.bytes, entry.bytes > 0, entry.screenshot {
+                    tray?.add([entry.url]); known.insert(name)
+                }
             }
+            known.formIntersection(names); snapshots = next; downloads = active.sorted { $0.path < $1.path }
+            status = "Watching \(folder.lastPathComponent)"
         }
-        known.formIntersection(names); snapshots = next; downloads = active.sorted { $0.path < $1.path }
     }
+}
+
+private struct FolderEntry: Sendable {
+    let url: URL
+    let bytes: Int64
+    let partial: DownloadSize?
+    let screenshot: Bool
 }

@@ -39,6 +39,8 @@ struct SettingsView: View {
     @State private var setupStatus = ""
     @State private var loginEnabled = SMAppService.mainApp.status == .enabled
     @State private var loginError = ""
+    @State private var diagnosticsStatus = ""
+    @State private var helpDocument: HelpDocument?
     @AppStorage("showMedia") private var showMedia = true
     @AppStorage("showUsage") private var showUsage = true
     @AppStorage("showSystem") private var showSystem = true
@@ -67,6 +69,12 @@ struct SettingsView: View {
                 }
             }.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }.frame(minWidth: 740, minHeight: 600)
+            .sheet(item: $helpDocument) { document in
+                VStack(alignment: .leading, spacing: 16) {
+                    HStack { Text(document.title).font(.title2.bold()); Spacer(); Button("Done") { helpDocument = nil }.keyboardShortcut(.cancelAction) }
+                    ScrollView { Text(document.contents).font(.system(size: 13)).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading) }
+                }.padding(24).frame(width: 620, height: 520)
+            }
     }
     private var general: some View {
         Form {
@@ -82,6 +90,19 @@ struct SettingsView: View {
                     Toggle("Agent usage", isOn: $showUsage)
                     Toggle("Sound, brightness, and battery", isOn: $showSystem)
                     Text("Choose the modules that appear when you open Crest.").font(.caption).foregroundStyle(.secondary)
+                }
+                Section("Display & keyboard") {
+                    Picker("Show Crest on", selection: Binding(get: { model.displays.selected }, set: { model.displays.selected = $0 })) {
+                        Text("Automatic").tag("automatic")
+                        ForEach(model.displays.choices) { Text($0.name).tag($0.id) }
+                        if model.displays.preferredUnavailable { Text("Preferred display (disconnected)").tag(model.displays.selected) }
+                    }
+                    if model.displays.preferredUnavailable { Text("Using an available display until your preferred display reconnects.").font(.caption).foregroundStyle(.secondary) }
+                    Toggle("Open with Control–Option–Space", isOn: Binding(get: { model.shortcut.enabled }, set: { value in
+                        model.shortcut.configure(value)
+                        UserDefaults.standard.set(model.shortcut.enabled, forKey: "globalShortcutEnabled")
+                    }))
+                    Text(model.shortcut.status).font(.caption).foregroundStyle(.secondary)
                 }
                 Section("Startup") {
                     Toggle("Open Crest at login", isOn: $loginEnabled).onChange(of: loginEnabled) { _, value in
@@ -134,7 +155,7 @@ struct SettingsView: View {
                     if let error = model.clipboard.error { Text(error).font(.caption).foregroundStyle(.orange) }
                 }
                 Section("Screenshot imports") { HStack { Button("Choose screenshot folder…") { model.screenshots.choose(tray: model.tray, screenshots: true) }; Button("Stop") { model.screenshots.stop() } }; Text(model.screenshots.status).font(.caption) }
-                Section("Downloads") { HStack { Button("Choose download folder…") { model.downloads.choose(tray: model.tray, screenshots: false) }; Button("Stop") { model.downloads.stop() } }; Text(model.downloads.status).font(.caption); Text("Shows partial-file size and growth speed. Browsers do not expose a universal download total; percentage and Safari package progress may be unavailable.").font(.caption).foregroundStyle(.secondary) }
+                Section("Downloads") { HStack { Button("Choose download folder…") { model.downloads.choose(tray: model.tray, screenshots: false) }; Button("Stop") { model.downloads.stop() } }; Text(model.downloads.status).font(.caption); Text("Shows partial-file and Safari download-package sizes and growth speed. A percentage appears only when the browser provides a usable total.").font(.caption).foregroundStyle(.secondary) }
         }.formStyle(.grouped)
     }
     private var media: some View {
@@ -158,6 +179,13 @@ struct SettingsView: View {
                     Text("Requires Accessibility permission. Enable again after each launch. Ordinary typing is not observed.").font(.caption).foregroundStyle(.secondary)
                 }
                 Section("Bluetooth") { Toggle("Monitor AirPods and battery devices", isOn: $bluetoothEnabled).onChange(of: bluetoothEnabled) { _, value in model.bluetooth.enable(value) }; Text(model.bluetooth.status).font(.caption) }
+                Section("App power") {
+                    Toggle("Show app power estimates", isOn: Binding(get: { model.energy.enabled }, set: { value in
+                        UserDefaults.standard.set(value, forKey: "appEnergyEnabled"); model.energy.configure(value)
+                    }))
+                    Text("Uses macOS process energy counters and groups readable helpers in each app bundle. Estimates omit system services and unreported hardware energy; they are not battery percentages. Names and readings stay in memory on this Mac.").font(.caption).foregroundStyle(.secondary)
+                    Text(model.energy.status).font(.caption)
+                }
         }.formStyle(.grouped)
     }
     private var updates: some View {
@@ -195,9 +223,17 @@ struct SettingsView: View {
             Section("This build") {
                 LabeledContent("Updates", value: model.updates.configured ? "Configured" : "Development build")
                 Text("Media compatibility, AirPods readings, and hardware-key overlays depend on your macOS version and device.").font(.caption).foregroundStyle(.secondary)
-                Text("Codex session alerts require a shared server. Per-app battery drain and universal download percentages are not available yet.").font(.caption).foregroundStyle(.secondary)
+                Text("Codex session alerts require a shared server. App power estimates and download percentages appear only when macOS or the browser supplies the necessary data.").font(.caption).foregroundStyle(.secondary)
             }
             Section("Help") {
+                Button("Export diagnostics…") { diagnosticsStatus = Diagnostics.export(model) }
+                Text("Exports version and connection flags only. No clipboard content, calendar entries, file paths, or account information. You choose where to save it.").font(.caption).foregroundStyle(.secondary)
+                if !diagnosticsStatus.isEmpty { Text(diagnosticsStatus).font(.caption) }
+                HStack {
+                    Button("Privacy") { helpDocument = HelpDocument(title: "Privacy", resource: "Privacy") }
+                    Button("Uninstall") { helpDocument = HelpDocument(title: "Uninstall Crest", resource: "Uninstall") }
+                    Button("Third-party licenses") { helpDocument = HelpDocument(title: "Third-party licenses", resource: "ThirdPartyNotices") }
+                }
                 Link("Feature coverage and known limitations", destination: URL(string: "https://github.com/genisis-lab/crest/blob/main/docs/FEATURES.md")!)
                 Link("Source and release information", destination: URL(string: "https://github.com/genisis-lab/crest")!)
                 Text("Repository access is required. Crest does not upload diagnostics, calendar entries, or clipboard history.").font(.caption).foregroundStyle(.secondary)
@@ -206,4 +242,14 @@ struct SettingsView: View {
     }
     private func setup(_ action: () throws -> String) { do { setupStatus = try action() } catch { setupStatus = error.localizedDescription } }
     private func configureMedia() { model.media.configure(enabled: mediaEnabled, player: mediaPlayer) }
+}
+
+private struct HelpDocument: Identifiable {
+    let title: String
+    let resource: String
+    var id: String { resource }
+    var contents: String {
+        guard let url = Bundle.main.url(forResource: resource, withExtension: "txt"), let text = try? String(contentsOf: url, encoding: .utf8) else { return "This document is unavailable. Rebuild or reinstall the complete Crest.app bundle." }
+        return text
+    }
 }

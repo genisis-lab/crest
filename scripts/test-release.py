@@ -37,4 +37,25 @@ with tempfile.TemporaryDirectory(prefix='crest-release-tests-') as temporary:
     assert result['CFBundleVersion'] == '2'
     assert result['CFBundleShortVersionString'] == '0.2.0'
     assert result['SUFeedURL'] == valid['feed_url']
+    assert result['SURequireSignedFeed'] is True
+    assert result['SUVerifyUpdateBeforeExtraction'] is True
+    assert result['SUEnableSystemProfiling'] is False
+    archive = folder/'Crest-0.2.0.zip'
+    archive.write_bytes(b'fixture')
+    feed = folder/'appcast.xml'
+    signature = base64.b64encode(bytes(64)).decode()
+    def appcast(channel='', version='2', length=7, url='https://updates.example.org/Crest-0.2.0.zip', signed=True):
+        return f'''<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle"><channel><item>
+        <sparkle:version>{version}</sparkle:version>{f'<sparkle:channel>{channel}</sparkle:channel>' if channel else ''}
+        <enclosure url="{url}" length="{length}" sparkle:edSignature="{signature if signed else ''}" />
+        </item></channel></rss>'''
+    cases = [(dict(), 'stable', True), (dict(channel='beta'), 'beta', True),
+        (dict(channel='beta'), 'stable', False), (dict(version='1'), 'stable', False),
+        (dict(length=99), 'stable', False), (dict(url='http://updates.example.org/Crest-0.2.0.zip'), 'stable', False),
+        (dict(signed=False), 'stable', False)]
+    for changes, channel, passes in cases:
+        feed.write_text(appcast(**changes))
+        completed = subprocess.run([sys.executable, str(root/'scripts/validate-appcast.py'), str(config_path), str(feed), str(folder), channel], capture_output=True)
+        assert (completed.returncode == 0) == passes, changes
 print('PASS release configuration: 8 invalid inputs preserved the bundle; valid metadata applied')
+print('PASS appcast validation: stable/beta entries accepted; wrong channel/build/length, HTTP and missing signatures rejected')

@@ -1,0 +1,23 @@
+Crest privacy information
+
+Crest stores its settings and local data on your Mac. There is no Crest account, advertising, analytics SDK, crash uploader, or automatic diagnostics upload.
+
+Clipboard history is off until enabled. Captured text and images are encrypted with AES-GCM. The encryption key is stored in this Mac’s Keychain. Recognized concealed/temporary clipboard types and password-manager applications are excluded. Exclusions are a best-effort filter: ordinary copied text can still contain sensitive information. Choose additional excluded apps in Files & Privacy.
+
+Clipboard retention applies to unpinned items. Pinned items remain until you delete them. Turning recording off keeps the encrypted archive on disk and clears it from the interface. Crest does not replace the key or rewrite existing history when loading fails.
+
+The tray stores file references and bookmarks, not copies. Removing a tray item does not delete the original file. Folder watching inspects only a folder you select, including partial download packages. It does not read browser history or follow symbolic links inside download packages.
+
+Agent integrations use your existing provider login. Codex requests are handled by the installed Codex CLI; its connections are governed by your provider settings and policies. The Claude bridge keeps only session routing, event state, project-folder name and quota data. It does not keep prompts, tool arguments or approval responses, and never approves actions. Installing the bridge preserves an existing status-line command; that command continues to run with the permissions it already had.
+
+Calendar access is optional. Meeting titles, times and supported meeting links stay in memory. Clicking Join opens the provider’s link in your browser. Disconnecting stops calendar reads and clears the list.
+
+Music controls may need Automation permission. Spotify artwork may be downloaded from the HTTPS artwork URL provided by Spotify. Calendar links, artwork servers, agent providers and a future configured update host can receive ordinary connection information such as your IP address.
+
+App power estimates use macOS process counters. Process names and readings stay in memory and are not included in diagnostics. No process memory, document contents or keystrokes are read. The optional global shortcut registers one key combination with macOS. The experimental hardware-key adapter observes only media-key events and requires Accessibility permission.
+
+Diagnostics export is manual and local. It contains only app/OS version, architecture category, display count, notch presence, accessibility options and connection/feature flags. It excludes clipboard/calendar content, file paths, process names, prompts, credentials and account usage values. Nothing is sent until you choose to share the file yourself.
+
+This development build has no update feed. A future configured Sparkle release contacts its update host for signed release information and downloads. System profiling is disabled in the release configuration.
+
+Data removal and integration removal are described in the bundled Uninstall instructions. Permission grants can be revoked in System Settings → Privacy & Security.

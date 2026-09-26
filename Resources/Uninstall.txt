@@ -1,0 +1,12 @@
+Removing Crest
+
+1. Open Crest Settings. Turn off Open Crest at login. In Connections, choose Remove integration for Claude if you installed it. This preserves unrelated Claude hooks and restores the previous status-line configuration when available.
+2. Quit Crest from its menu-bar menu, then move Crest.app to the Trash.
+3. For a reinstall, keep local data. To remove it, move ~/Library/Application Support/Crest to the Trash after checking it for anything you need. This folder holds encrypted clipboard history, tray references, bridge events/helper and integration backups. Removing the folder does not delete the originals referenced by the tray.
+4. App preferences are stored under the bundle identifier app.crest.mac. They include the selected folder bookmarks, display preference and enabled features. Remove these only if you want a completely fresh setup.
+5. To remove the clipboard encryption key, use Keychain Access and locate the generic password with service app.crest.clipboard and account local-v1. Deleting that key makes any retained encrypted clipboard archive unreadable. Keep the key if you may reinstall or need to recover the archive.
+6. Optional: revoke Crest’s Calendar, Automation, Bluetooth or Accessibility access in System Settings → Privacy & Security.
+
+Do not delete the clipboard key to solve a read failure. Keep the encrypted archive and key together while troubleshooting. Development builds with a changed ad-hoc signature may require macOS to ask for Keychain access again.
+
+Uninstalling cannot undo copies or AirDrop transfers you previously made outside Crest.
