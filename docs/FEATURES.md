@@ -31,6 +31,13 @@ The target is the public NotchView homepage and release notes, not access to pro
 | Settings | Native sidebar, grouped forms, contextual setup, support status, display choice, customizable Overview modules and offline privacy/uninstall/licenses | 0.2 UI inspected; 0.3 additions require final live review |
 | Global shortcut | Optional Control–Option–Space registration; keyboard-open state and Escape dismissal | No ordinary key-event monitoring or Accessibility requirement; live shortcut check pending |
 | Diagnostics | Manual local JSON export using a strict field allowlist | Privacy-schema tests pass; excludes user content, identifiers, paths and process names |
+| Live notch activities | Priority-ordered collapsed indicators for waiting agents, focus timer, meetings within ten minutes and downloads; edges widen only for text activities; optional | Timer and time-format logic tested; on-device visual check of each state outstanding |
+| Volume/brightness HUD | Collapsed-notch level bar fed by Core Audio, DisplayServices and the optional hardware-key adapter | Polling publishes only real changes; on-device key-repeat and device-switch check outstanding |
+| Focus timer | Wall-clock countdown persisted across relaunch, pause/resume/extend, completion sound, Overview card and menu-bar presets | Start/pause/resume/extend/clamp/encoding checks pass; sleep-across-deadline check outstanding |
+| Keep Mac Awake | Named IOKit display-sleep assertion, timed or indefinite, released on quit | Assertion visibility in `pmset -g assertions` outstanding |
+| Notes | Plain-text scratchpad with debounced owner-only saves, read-failure protection and Clear/Undo | Not encrypted by design; on-device typing/collapse interaction check outstanding |
+| Media position and seeking | MediaRemote elapsed/duration/timestamp, Music/Spotify AppleScript position and duration, drag-to-seek | Interpolation tests pass; live player seeking needs Automation permission |
+| Installer | `scripts/install.sh` installs a build, CI artifact, zip or app; checksum/signature/bundle-ID checks; never replaces a non-Crest app | Exercised in CI against the packaged archive; first run on the owner's Mac outstanding |
 | Sparkle | 2.10 embedded, checks/preferences, stable/beta channels, config validation, release script | Extracted package verified; actual Sparkle archive/feed signature and rejection tests pass. Live notarized upgrade deferred with paid enrollment |
 
 Full parity is not yet achieved. These gaps remain in scope and must not be removed from this matrix to imply completion.

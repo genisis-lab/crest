@@ -19,6 +19,10 @@ jobs:
           mkdir -p "$RUNNER_TEMP/Applications"
           CREST_INSTALL_DIR="$RUNNER_TEMP/Applications" CREST_NO_LAUNCH=1 bash scripts/install.sh dist/Crest.zip
           codesign --verify --deep --strict "$RUNNER_TEMP/Applications/Crest.app"
+      # Launches the app (exits after 3 s) in preview states and posts screenshots as annotations.
+      - name: Launch smoke test and preview screenshots
+        continue-on-error: true
+        run: bash scripts/ci-screenshots.sh "$RUNNER_TEMP/Applications/Crest.app"
       # Downloadable development build. Storage quota can be full, so this never fails the run.
       - name: Upload app archive
         uses: actions/upload-artifact@v4

@@ -192,10 +192,14 @@ enum LiveActivity: Equatable {
         NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(checkVisibility), name: NSWorkspace.activeSpaceDidChangeNotification, object: nil)
         visibilityTimer = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in Task { @MainActor in self?.checkVisibility() } }
         layout(); panel.orderFrontRegardless()
+        let arguments = ProcessInfo.processInfo.arguments
+        // Development screenshots: `--preview <tab>` opens and pins that tab; `--preview collapsed` skips the greeting. Nothing is saved.
+        let preview = arguments.firstIndex(of: "--preview").flatMap { arguments.indices.contains($0 + 1) ? arguments[$0 + 1] : nil }
         if model.onboarding { model.expanded = true }
-        else { model.alert("Welcome back", symbol: "mountain.2.fill") }
+        else if preview == nil { model.alert("Welcome back", symbol: "mountain.2.fill") }
+        if let preview, let tab = NotchTab(rawValue: preview), !model.onboarding { model.tab = tab; model.pinned = true; model.expanded = true }
         // Only a smoke-test invocation exits automatically; ordinary launches remain running.
-        if ProcessInfo.processInfo.arguments.contains("--smoke-test") { DispatchQueue.main.asyncAfter(deadline: .now() + 3) { NSApp.terminate(nil) } }
+        if arguments.contains("--smoke-test") { DispatchQueue.main.asyncAfter(deadline: .now() + 3) { NSApp.terminate(nil) } }
     }
     func layout() {
         guard panel != nil, let screen = model.displays.screen else { return }

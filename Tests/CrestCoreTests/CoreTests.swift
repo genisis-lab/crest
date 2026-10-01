@@ -225,7 +225,7 @@ func focusTimerPausesResumesAndSurvivesEncoding() throws {
     timer.reset(); check(timer == FocusTimer())
     timer.start(999_999, at: start); check(timer.duration == FocusTimer.maximum)
 }
-func clockFormatsCountdownsAndPositions() {
+func timeFormatsCountdownsAndPositions() {
     check(TimeFormat.string(0) == "0:00")
     check(TimeFormat.string(59.2, roundingUp: true) == "1:00")
     check(TimeFormat.string(59.8) == "0:59")
@@ -298,7 +298,7 @@ let tests: [(String, () throws -> Void)] = [
     ("Clipboard storage recovery", clipboardFailuresPreserveExistingArchive),
     ("Concurrent session lifecycle", concurrentSessionsRejectDelayedEvents),
     ("Focus timer", focusTimerPausesResumesAndSurvivesEncoding),
-    ("Clock formatting", clockFormatsCountdownsAndPositions),
+    ("Time formatting", timeFormatsCountdownsAndPositions),
     ("Playback position", playbackPositionInterpolatesAndClamps),
     ("Clipboard kinds", clipboardKindsRecognizeLinksAndColors)
 ]

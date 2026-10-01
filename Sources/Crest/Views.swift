@@ -52,7 +52,7 @@ struct NotchView: View {
                         footer
                     }
                 }
-                .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.97, anchor: .top)))
+                .transition(reduceMotion ? AnyTransition.opacity : AnyTransition.opacity.combined(with: .scale(scale: 0.97, anchor: .top)))
             } else if let notice = model.notice {
                 NoticeView(notice: notice).padding(.horizontal, 18).padding(.bottom, 10)
                     .transition(.opacity)
@@ -179,7 +179,7 @@ struct NotchView: View {
             }
         case .download:
             if let item = model.downloads.downloads.first {
-                Text(item.fraction.map { "\(Int($0 * 100))%" } ?? ByteCountFormatter.string(fromByteCount: Int64(item.bytesPerSecond), countStyle: .file) + "/s")
+                Text(downloadSummary(item))
                     .font(.system(size: 10, weight: .semibold)).monospacedDigit().foregroundStyle(CrestStyle.blue).lineLimit(1)
             }
         case .media:
@@ -194,6 +194,11 @@ struct NotchView: View {
                 }
             }
         }
+    }
+
+    private func downloadSummary(_ item: DownloadActivity) -> String {
+        if let fraction = item.fraction { return "\(Int(fraction * 100))%" }
+        return ByteCountFormatter.string(fromByteCount: Int64(item.bytesPerSecond), countStyle: .file) + "/s"
     }
 
     // MARK: Expanded chrome
@@ -274,6 +279,8 @@ struct NotchView: View {
         HStack(spacing: 14) { Image(systemName: icon).font(.system(size: 19)).frame(width: 28).foregroundStyle(CrestStyle.blue); VStack(alignment: .leading, spacing: 3) { Text(title).font(.system(size: 12, weight: .semibold)); Text(detail).font(.system(size: 12)).foregroundStyle(CrestStyle.secondary).fixedSize(horizontal: false, vertical: true) } }
     }
 }
+
+func rowOpacity(selected: Bool, hovered: Bool) -> Double { selected ? 0.10 : hovered ? 0.07 : 0.04 }
 
 struct Card<Content: View>: View {
     @ViewBuilder var content: Content
@@ -584,7 +591,7 @@ struct TrayView: View {
             }.buttonStyle(RowIconButtonStyle()).disabled(!exists).opacity(isHovered || isSelected ? 1 : 0.5)
         }
         .padding(10)
-        .background(.white.opacity(isSelected ? 0.10 : isHovered ? 0.07 : 0.04), in: RoundedRectangle(cornerRadius: 12))
+        .background(.white.opacity(rowOpacity(selected: isSelected, hovered: isHovered)), in: RoundedRectangle(cornerRadius: 12))
         .contentShape(RoundedRectangle(cornerRadius: 12))
         .onHover { inside in hovered = inside ? item.id : (hovered == item.id ? nil : hovered) }
         .onTapGesture(count: 2) { if exists { NSWorkspace.shared.open(url) } }
@@ -664,7 +671,7 @@ struct ClipboardView: View {
             }.buttonStyle(RowIconButtonStyle())
         }
         .padding(10)
-        .background(.white.opacity(isSelected ? 0.10 : isHovered ? 0.07 : 0.04), in: RoundedRectangle(cornerRadius: 12))
+        .background(.white.opacity(rowOpacity(selected: isSelected, hovered: isHovered)), in: RoundedRectangle(cornerRadius: 12))
         .onHover { inside in hovered = inside ? item.id : (hovered == item.id ? nil : hovered) }
         .onDrag { if let data = item.image, let image = NSImage(data: data) { return NSItemProvider(object: image) }; return NSItemProvider(object: (item.text ?? "") as NSString) }
     }
