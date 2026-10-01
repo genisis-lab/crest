@@ -44,6 +44,13 @@ struct SettingsView: View {
     @AppStorage("showMedia") private var showMedia = true
     @AppStorage("showUsage") private var showUsage = true
     @AppStorage("showSystem") private var showSystem = true
+    @AppStorage("showFocus") private var showFocus = true
+    @AppStorage("hoverOpen") private var hoverOpen = HoverOpen.short.rawValue
+    @AppStorage("haptics") private var haptics = true
+    @AppStorage("liveActivities") private var liveActivities = true
+    @AppStorage("showBatteryPercent") private var showBattery = true
+    @AppStorage("attentionSound") private var attentionSound = true
+    @AppStorage("timerSound") private var timerSound = true
     var body: some View {
         HStack(spacing: 0) {
             VStack(spacing: 0) {
@@ -85,10 +92,22 @@ struct SettingsView: View {
                 }.padding(.vertical, 8)
             }
                 Section("Appearance") { Toggle("Glass appearance", isOn: $model.glass); Text("Liquid Glass on macOS 26 and later; native material on older systems. Respects Reduce Transparency and Increase Contrast.").font(.caption).foregroundStyle(.secondary); Toggle("Hide in full-screen apps", isOn: $model.hideFullScreen); Toggle("Keep the notch expanded", isOn: $model.pinned); Button("Show welcome tour") { model.onboarding = true; model.expanded = true } }
+                Section("Notch") {
+                    Picker("Open on hover", selection: $hoverOpen) { ForEach(HoverOpen.allCases) { Text($0.title).tag($0.rawValue) } }
+                    Toggle("Haptic feedback when opening", isOn: $haptics)
+                    Toggle("Live activities", isOn: $liveActivities).onChange(of: liveActivities) { _, _ in model.updateActivity() }
+                    Text("Agent requests, timers, meetings starting soon and downloads appear beside the notch while it is closed.").font(.caption).foregroundStyle(.secondary)
+                    Toggle("Battery percentage", isOn: $showBattery)
+                }
+                Section("Focus") {
+                    Toggle("Play a sound when a timer ends", isOn: $timerSound)
+                    Text("Start timers from Overview or the menu bar. A running timer continues after Crest restarts. Keep Mac Awake is in the battery card and the menu bar.").font(.caption).foregroundStyle(.secondary)
+                }
                 Section("Overview") {
                     Toggle("Now Playing", isOn: $showMedia)
                     Toggle("Agent usage", isOn: $showUsage)
                     Toggle("Sound, brightness, and battery", isOn: $showSystem)
+                    Toggle("Focus timer", isOn: $showFocus)
                     Text("Choose the modules that appear when you open Crest.").font(.caption).foregroundStyle(.secondary)
                 }
                 Section("Display & keyboard") {
@@ -132,6 +151,7 @@ struct SettingsView: View {
                     Text("Install local event hooks and a usage status-line bridge. Existing hooks are preserved; an existing status-line command is forwarded. This does not approve agent actions.").font(.caption).foregroundStyle(.secondary)
                     HStack { Button("Install alerts + usage") { setup { try ClaudeSetup.install(includeStatus: true) } }; Button("Alerts only") { setup { try ClaudeSetup.install(includeStatus: false) } }; Button("Remove integration") { setup { try ClaudeSetup.uninstall() } } }
                     Text("Usage requires Claude Code 2.1.251+ and quota fields from the provider. Uses your existing Claude session.").font(.caption).foregroundStyle(.secondary)
+                    Toggle("Play a sound when an agent needs you", isOn: $attentionSound)
                     if !setupStatus.isEmpty { Text(setupStatus).font(.caption) }
                 }
                 Section("Calendar") { HStack { Button("Connect calendars") { Task { await model.calendar.connect() } }; Button("Disconnect") { model.calendar.disconnect() } }; Text(model.calendar.status).font(.caption); ForEach(model.calendar.meetings) { MeetingRow(meeting: $0) } }
@@ -153,6 +173,10 @@ struct SettingsView: View {
                     Text("Ignore apps (one bundle identifier per line)").font(.caption)
                     TextEditor(text: Binding(get: { model.clipboard.exclusions }, set: { model.clipboard.exclusions = $0 })).font(.system(.caption, design: .monospaced)).frame(height: 90)
                     if let error = model.clipboard.error { Text(error).font(.caption).foregroundStyle(.orange) }
+                }
+                Section("Notes") {
+                    Text("Notes are saved as plain text in Crest's Application Support folder with owner-only file permissions. Unlike clipboard history, they are not encrypted.").font(.caption).foregroundStyle(.secondary)
+                    if let error = model.notes.error { Text(error).font(.caption).foregroundStyle(.orange) }
                 }
                 Section("Screenshot imports") { HStack { Button("Choose screenshot folder…") { model.screenshots.choose(tray: model.tray, screenshots: true) }; Button("Stop") { model.screenshots.stop() } }; Text(model.screenshots.status).font(.caption) }
                 Section("Downloads") { HStack { Button("Choose download folder…") { model.downloads.choose(tray: model.tray, screenshots: false) }; Button("Stop") { model.downloads.stop() } }; Text(model.downloads.status).font(.caption); Text("Shows partial-file and Safari download-package sizes and growth speed. A percentage appears only when the browser provides a usable total.").font(.caption).foregroundStyle(.secondary) }

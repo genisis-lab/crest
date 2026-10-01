@@ -1,5 +1,8 @@
 name: Swift build and core checks
-on: [push, pull_request]
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
 permissions:
   contents: read
 jobs:
@@ -11,3 +14,46 @@ jobs:
         run: bash scripts/test.sh
       - name: Bundle and verify local build
         run: bash scripts/build.sh
+      - name: Install from the packaged archive
+        run: |
+          mkdir -p "$RUNNER_TEMP/Applications"
+          CREST_INSTALL_DIR="$RUNNER_TEMP/Applications" CREST_NO_LAUNCH=1 bash scripts/install.sh dist/Crest.zip
+          codesign --verify --deep --strict "$RUNNER_TEMP/Applications/Crest.app"
+      # Launches the app (each launch exits after 3 s) in preview states and captures the panel.
+      - name: Launch smoke test and preview screenshots
+        continue-on-error: true
+        run: bash scripts/ci-screenshots.sh "$RUNNER_TEMP/Applications/Crest.app"
+      # Temporary: post captures as annotations for remote review (10 per step, 50 per job).
+      - name: Post welcome capture
+        continue-on-error: true
+        run: bash scripts/ci-screenshots.sh emit welcome
+      - name: Post overview capture
+        continue-on-error: true
+        run: bash scripts/ci-screenshots.sh emit timer-overview
+      - name: Post tray capture
+        continue-on-error: true
+        run: bash scripts/ci-screenshots.sh emit Tray
+      - name: Post notes capture
+        continue-on-error: true
+        run: bash scripts/ci-screenshots.sh emit Notes
+      - name: Post collapsed captures
+        continue-on-error: true
+        run: bash scripts/ci-screenshots.sh emit timer-collapsed hud
+      - name: Upload preview screenshots
+        uses: actions/upload-artifact@v4
+        continue-on-error: true
+        with:
+          name: Crest-screenshots-${{ github.sha }}
+          path: ${{ runner.temp }}/crest-screens/*.jpg
+          retention-days: 7
+      # Downloadable development build. Storage quota can be full, so this never fails the run.
+      - name: Upload app archive
+        uses: actions/upload-artifact@v4
+        continue-on-error: true
+        with:
+          name: Crest-${{ github.sha }}
+          path: |
+            dist/Crest.zip
+            dist/Crest.sha256
+          if-no-files-found: error
+          retention-days: 7

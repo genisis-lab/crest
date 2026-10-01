@@ -6,6 +6,8 @@ Clipboard history is off until enabled. Captured text and images are encrypted w
 
 Clipboard retention applies to unpinned items. Pinned items remain until you delete them. Turning recording off keeps the encrypted archive on disk and clears it from the interface. Crest does not replace the key or rewrite existing history when loading fails.
 
+Notes are saved as plain text in Crest’s Application Support folder with owner-only file permissions. They are not encrypted and never leave your Mac unless you copy or share them. A running focus timer stores only its end time in app preferences. Keep Mac Awake uses a named macOS power assertion that ends when you turn it off, its duration ends, or Crest quits.
+
 The tray stores file references and bookmarks, not copies. Removing a tray item does not delete the original file. Folder watching inspects only a folder you select, including partial download packages. It does not read browser history or follow symbolic links inside download packages.
 
 Agent integrations use your existing provider login. Codex requests are handled by the installed Codex CLI; its connections are governed by your provider settings and policies. The Claude bridge keeps only session routing, event state, project-folder name and quota data. It does not keep prompts, tool arguments or approval responses, and never approves actions. Installing the bridge preserves an existing status-line command; that command continues to run with the permissions it already had.

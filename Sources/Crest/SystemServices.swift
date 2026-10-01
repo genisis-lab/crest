@@ -48,17 +48,19 @@ import Darwin
         return AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size, &id) == noErr && id != 0 ? id : nil
     }
     func refresh() {
-        guard let id = device() else { available = false; return }
+        // Assign only real changes: this runs every second and each publish redraws the panel.
+        guard let id = device() else { if available { available = false }; return }
         var address = AudioObjectPropertyAddress(mSelector: kAudioHardwareServiceDeviceProperty_VirtualMainVolume, mScope: kAudioDevicePropertyScopeOutput, mElement: kAudioObjectPropertyElementMain)
         var value: Float32 = 0; var size = UInt32(MemoryLayout.size(ofValue: value))
         let success = AudioObjectGetPropertyData(id, &address, 0, nil, &size, &value) == noErr
-        available = success
-        if success {
-            if initialized && abs(value - volume) > 0.015 { onChange?("Volume · \(Int(value * 100))%") }
-            volume = value; initialized = true
-        }
+        if available != success { available = success }
+        let wasInitialized = initialized
+        var changed = false
+        if success && value != volume { changed = abs(value - volume) > 0.015; volume = value }
+        if success { initialized = true }
         address.mSelector = kAudioDevicePropertyMute; var mute: UInt32 = 0; size = 4
-        if AudioObjectGetPropertyData(id, &address, 0, nil, &size, &mute) == noErr { muted = mute != 0 }
+        if AudioObjectGetPropertyData(id, &address, 0, nil, &size, &mute) == noErr, muted != (mute != 0) { muted = mute != 0; changed = true }
+        if changed && wasInitialized { onChange?(muted ? "Muted" : "Volume · \(Int((volume * 100).rounded()))%") }
     }
     @discardableResult func set(_ value: Float) -> Bool {
         guard let id = device() else { return false }
@@ -92,8 +94,13 @@ import Darwin
     }
     private var display: UInt32 { NSScreen.screens.first(where: { $0.safeAreaInsets.top > 0 })?.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? UInt32 ?? CGMainDisplayID() }
     func refresh() {
-        var next: Float = 0; available = getValue?(display, &next) == 0
-        if available { if initialized && abs(next - value) > 0.015 { onChange?("Brightness · \(Int(next * 100))%") }; value = next; initialized = true }
+        var next: Float = 0; let success = getValue?(display, &next) == 0
+        if available != success { available = success }
+        guard success else { return }
+        let changed = initialized && abs(next - value) > 0.015
+        if next != value { value = next }
+        initialized = true
+        if changed { onChange?("Brightness · \(Int((next * 100).rounded()))%") }
     }
     @discardableResult func set(_ value: Float) -> Bool { if setValue?(display, min(1, max(0, value))) == 0 { refresh(); return true }; return false }
 }

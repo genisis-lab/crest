@@ -200,6 +200,73 @@ func concurrentSessionsRejectDelayedEvents() {
     check(ledger.sessions.isEmpty)
 }
 
+func focusTimerPausesResumesAndSurvivesEncoding() throws {
+    let start = Date(timeIntervalSince1970: 1000)
+    var timer = FocusTimer()
+    check(!timer.isActive && timer.progress(at: start) == 0)
+    timer.start(0, at: start); check(!timer.isActive)
+    timer.start(.nan, at: start); check(!timer.isActive)
+    timer.start(1500, at: start)
+    check(timer.isRunning && timer.remaining(at: start.addingTimeInterval(500)) == 1000)
+    check(abs(timer.progress(at: start.addingTimeInterval(750)) - 0.5) < 0.0001)
+    timer.pause(at: start.addingTimeInterval(600))
+    check(timer.isPaused && !timer.isRunning && timer.remaining(at: start.addingTimeInterval(5000)) == 900)
+    check(!timer.isFinished(at: start.addingTimeInterval(99999)))
+    let decoded = try JSONDecoder().decode(FocusTimer.self, from: JSONEncoder().encode(timer))
+    check(decoded == timer)
+    timer.resume(at: start.addingTimeInterval(2000))
+    check(timer.remaining(at: start.addingTimeInterval(2000)) == 900)
+    timer.extend(by: 300, at: start.addingTimeInterval(2000))
+    check(timer.remaining(at: start.addingTimeInterval(2000)) == 1200 && timer.duration == 1800)
+    check(timer.isFinished(at: start.addingTimeInterval(3200)) && !timer.isFinished(at: start.addingTimeInterval(3199)))
+    check(timer.remaining(at: start.addingTimeInterval(9000)) == 0)
+    timer.extend(by: 200_000, at: start.addingTimeInterval(2000))
+    check(timer.remaining(at: start.addingTimeInterval(2000)) == FocusTimer.maximum)
+    timer.reset(); check(timer == FocusTimer())
+    timer.start(999_999, at: start); check(timer.duration == FocusTimer.maximum)
+}
+func timeFormatsCountdownsAndPositions() {
+    check(TimeFormat.string(0) == "0:00")
+    check(TimeFormat.string(59.2, roundingUp: true) == "1:00")
+    check(TimeFormat.string(59.8) == "0:59")
+    check(TimeFormat.string(3725) == "1:02:05")
+    check(TimeFormat.string(-4) == "0:00")
+    check(TimeFormat.string(.infinity) == "--:--")
+    check(TimeFormat.compact(42) == "42s")
+    check(TimeFormat.compact(61) == "2m")
+    check(TimeFormat.compact(3600) == "1h")
+    check(TimeFormat.compact(3900) == "1h 5m")
+    check(TimeFormat.compact(86400 * 2 + 3600 * 3) == "2d 3h")
+    check(TimeFormat.compact(86400 * 7) == "7d")
+    check(TimeFormat.compact(1e300) != "")
+}
+func playbackPositionInterpolatesAndClamps() {
+    let sampled = Date(timeIntervalSince1970: 100)
+    check(PlaybackPosition(elapsed: nil, duration: 10, rate: 1, sampledAt: sampled) == nil)
+    check(PlaybackPosition(elapsed: -1, duration: 10, rate: 1, sampledAt: sampled) == nil)
+    let playing = PlaybackPosition(elapsed: 30, duration: 200, rate: 1, sampledAt: sampled)
+    check(playing?.elapsed(at: sampled.addingTimeInterval(10)) == 40)
+    check(playing?.fraction(at: sampled.addingTimeInterval(70)) == 0.5)
+    check(playing?.elapsed(at: sampled.addingTimeInterval(9999)) == 200)
+    check(playing?.elapsed(at: sampled.addingTimeInterval(-50)) == 30)
+    let paused = PlaybackPosition(elapsed: 30, duration: .nan, rate: 0, sampledAt: sampled)
+    check(paused?.duration == nil && paused?.fraction(at: sampled) == nil)
+    check(paused?.elapsed(at: sampled.addingTimeInterval(60)) == 30)
+}
+func clipboardKindsRecognizeLinksAndColors() {
+    check(ClipItem(text: "https://example.com/path?q=1").kind == .link)
+    check(ClipItem(text: "  http://example.com  ").link?.host == "example.com")
+    check(ClipItem(text: "file:///etc/passwd").kind == .text)
+    check(ClipItem(text: "javascript:alert(1)").link == nil)
+    check(ClipItem(text: "see https://example.com today").kind == .text)
+    check(ClipItem(text: "#ff8000").color == ClipColor(red: 1, green: 128.0 / 255, blue: 0))
+    check(ClipItem(text: "#FFF").color == ClipColor(red: 1, green: 1, blue: 1))
+    check(ClipItem(text: "#+fffff").color == nil)
+    check(ClipItem(text: "#12345").kind == .text)
+    check(ClipItem(image: Data([1, 2, 3])).kind == .image)
+    check(ClipItem(text: "plain words").kind == .text)
+}
+
 private var failures = 0
 private var assertions = 0
 func check(_ condition: @autoclosure () throws -> Bool, file: String = #filePath, line: Int = #line) {
@@ -229,7 +296,11 @@ let tests: [(String, () throws -> Void)] = [
     ("Process energy counters", processCountersHandleUnitsResetsAndPIDReuse),
     ("Diagnostics privacy", diagnosticsUseOnlyExplicitFields),
     ("Clipboard storage recovery", clipboardFailuresPreserveExistingArchive),
-    ("Concurrent session lifecycle", concurrentSessionsRejectDelayedEvents)
+    ("Concurrent session lifecycle", concurrentSessionsRejectDelayedEvents),
+    ("Focus timer", focusTimerPausesResumesAndSurvivesEncoding),
+    ("Time formatting", timeFormatsCountdownsAndPositions),
+    ("Playback position", playbackPositionInterpolatesAndClamps),
+    ("Clipboard kinds", clipboardKindsRecognizeLinksAndColors)
 ]
 for (name, test) in tests { let before = failures; do { try test() } catch { failures += 1; print("FAIL \(name): \(error)") }; if failures == before { print("PASS \(name)") } }
 print("\(tests.count) checks, \(assertions) assertions, \(failures) failures")

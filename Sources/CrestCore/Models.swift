@@ -189,3 +189,35 @@ public enum HookConfiguration {
         result["hooks"] = hooks; return result
     }
 }
+
+public struct ClipColor: Equatable, Sendable {
+    public let red: Double, green: Double, blue: Double
+    public init(red: Double, green: Double, blue: Double) { self.red = red; self.green = green; self.blue = blue }
+}
+public enum ClipKind: String, Sendable { case text, link, color, image }
+extension ClipItem {
+    public var kind: ClipKind {
+        guard let text else { return .image }
+        if Self.link(in: text) != nil { return .link }
+        if Self.color(in: text) != nil { return .color }
+        return .text
+    }
+    public var link: URL? { text.flatMap(Self.link(in:)) }
+    public var color: ClipColor? { text.flatMap(Self.color(in:)) }
+    /// A single web address. Other schemes are never opened from clipboard history.
+    public static func link(in text: String) -> URL? {
+        let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard value.count <= 4096, !value.contains(where: \.isWhitespace), let url = URL(string: value),
+              let scheme = url.scheme?.lowercased(), scheme == "https" || scheme == "http", url.host?.isEmpty == false else { return nil }
+        return url
+    }
+    /// `#RGB` or `#RRGGBB`.
+    public static func color(in text: String) -> ClipColor? {
+        var hex = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard hex.hasPrefix("#") else { return nil }
+        hex.removeFirst()
+        if hex.count == 3 { hex = hex.map { "\($0)\($0)" }.joined() }
+        guard hex.count == 6, hex.allSatisfy(\.isHexDigit), let value = UInt32(hex, radix: 16) else { return nil }
+        return ClipColor(red: Double(value >> 16 & 0xff) / 255, green: Double(value >> 8 & 0xff) / 255, blue: Double(value & 0xff) / 255)
+    }
+}

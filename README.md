@@ -2,7 +2,23 @@
 
 A native Swift notch companion for macOS 14 and later. Built with SwiftUI, AppKit and Sparkle 2.10. Liquid Glass is used on macOS 26+, with material and accessibility fallbacks.
 
-**Status: 0.3.0 development build, not full verified NotchView parity.** The project is an original implementation based on the advertised feature list. It does not contain NotchView source or assets.
+**Status: 0.4.0 development build, not full verified NotchView parity.** The project is an original implementation based on the advertised feature list. It does not contain NotchView source or assets.
+
+## Install
+
+On a Mac with the Swift toolchain (Xcode or Command Line Tools), from a clone of this repository:
+
+```sh
+bash scripts/install.sh
+```
+
+It builds, verifies and copies `Crest.app` into `/Applications` (or `~/Applications` when `/Applications` is not writable), replacing an older Crest, then opens it. Without a toolchain, download the `Crest-<commit>` artifact from a successful [Actions run](https://github.com/genisis-lab/crest/actions) and pass it to the same script; it accepts the downloaded zip, the unzipped folder, `Crest.zip` or `Crest.app`:
+
+```sh
+bash scripts/install.sh ~/Downloads/Crest-<commit>.zip
+```
+
+The script checks the archive checksum and signature, only ever replaces an app with Crest's bundle identifier, and clears the download quarantine flag so the ad-hoc signed development build can open. Application Support data and Keychain entries are kept across reinstalls. Because each local build has a new ad-hoc signature, macOS may ask again for Keychain, Automation or Accessibility access.
 
 ## Build and run
 
@@ -20,9 +36,19 @@ On some Command Line Tools 27 installations, the SwiftUI macro plugin is absent.
 
 ## Using Crest
 
-Hover the notch to expand it. It begins collapsing 120 ms after the pointer leaves, except while using a file dialog, dragging, or previewing. Pin it to stay open, or use the menu-bar mountain icon. Pinning is off at each launch and is never restored automatically. Macs without a notch use a top-center panel. Drag files into the panel, select them, then copy, AirDrop or remove the tray reference. Removing a tray item never deletes the source file.
+Hover the notch to expand it (after a short pause by default; choose instant, a longer pause or click-only in General settings). It begins collapsing 120 ms after the pointer leaves, except while using a file dialog, dragging, previewing or typing a note. Pin it to stay open, or use the menu-bar mountain icon. Pinning is off at each launch and is never restored automatically. Macs without a notch use a top-center panel. Drag files into the panel, select them, then copy, AirDrop or remove the tray reference. Removing a tray item never deletes the source file.
 
-The interface contains Overview, Agents, Tray and Clipboard. Overview modules can be hidden in Settings. Native sidebar Settings includes General, Connections, Files & Privacy, Media & System, Updates and Support. Command-1 through Command-4 switch sections while Crest is focused; Command-P pins it and Escape collapses it. File search, Quick Look, and undo for tray removal are built in. General settings also supports a preferred display and an optional Control–Option–Space global shortcut. Keyboard-opened panels close with Escape or loss of focus. The shortcut does not observe ordinary typing.
+The interface contains Overview, Agents, Tray, Clipboard and Notes. Overview modules can be hidden in Settings. Native sidebar Settings includes General, Connections, Files & Privacy, Media & System, Updates and Support. Command-1 through Command-5 switch sections while Crest is focused; Command-P pins it and Escape collapses it. File search, Quick Look, and undo for tray removal are built in. General settings also supports a preferred display and an optional Control–Option–Space global shortcut. Keyboard-opened panels close with Escape or loss of focus. The shortcut does not observe ordinary typing.
+
+### Live activities, focus and notes
+
+While closed, the notch shows the most important current activity beside the cutout: an agent waiting for you, a running focus timer, a meeting starting within ten minutes, or an active download. Otherwise it shows Now Playing artwork or the battery level. Volume and brightness changes show a level bar. Live activities can be turned off in General settings.
+
+- **Focus timer:** start 5–45 minute timers from Overview or 5–60 minutes from the menu-bar icon. Pause, resume, add five minutes or stop. A running timer survives relaunch and plays a sound when it ends (optional).
+- **Keep Mac Awake:** the cup button in the battery card or the menu-bar submenu holds a macOS display-sleep assertion indefinitely or for 30 minutes to 2 hours. It ends when Crest quits.
+- **Notes:** a scratchpad saved automatically to `notes.txt` in Application Support with owner-only permissions. Notes are not encrypted.
+- **Now Playing** shows elapsed and remaining time. Drag the bar to seek when the player supports it.
+- **Tray** rows show Quick Look thumbnails, size and folder; double-click opens a file. **Clipboard** rows copy on click, and can be filtered to pinned items, links or images; links can be opened and hex colors show a swatch.
 
 ### Claude and Codex
 
