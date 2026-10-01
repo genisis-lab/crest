@@ -113,6 +113,7 @@ enum LiveActivity: Equatable {
         brightness.enable(UserDefaults.standard.bool(forKey: "brightnessEnabled")); bluetooth.enable(UserDefaults.standard.bool(forKey: "bluetoothEnabled"))
         energy.configure(UserDefaults.standard.bool(forKey: "appEnergyEnabled"))
         screenshots.restore(tray: tray, screenshots: true); downloads.restore(tray: tray, screenshots: false)
+        updateActivity()
     }
     func alert(_ text: String, symbol: String = "info.circle", level: Double? = nil, urgent: Bool = false) {
         if !urgent && agents.sessions.contains(where: { $0.state == "Needs you" }) { return }
