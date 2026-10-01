@@ -1,5 +1,8 @@
 name: Swift build and core checks
-on: [push, pull_request]
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
 permissions:
   contents: read
 jobs:
@@ -11,3 +14,19 @@ jobs:
         run: bash scripts/test.sh
       - name: Bundle and verify local build
         run: bash scripts/build.sh
+      - name: Install from the packaged archive
+        run: |
+          mkdir -p "$RUNNER_TEMP/Applications"
+          CREST_INSTALL_DIR="$RUNNER_TEMP/Applications" CREST_NO_LAUNCH=1 bash scripts/install.sh dist/Crest.zip
+          codesign --verify --deep --strict "$RUNNER_TEMP/Applications/Crest.app"
+      # Downloadable development build. Storage quota can be full, so this never fails the run.
+      - name: Upload app archive
+        uses: actions/upload-artifact@v4
+        continue-on-error: true
+        with:
+          name: Crest-${{ github.sha }}
+          path: |
+            dist/Crest.zip
+            dist/Crest.sha256
+          if-no-files-found: error
+          retention-days: 7

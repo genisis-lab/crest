@@ -11,6 +11,13 @@ struct TrayItem: Identifiable, Codable {
     var date = Date()
     var url: URL { if let bookmark { var stale = false; if let url = try? URL(resolvingBookmarkData: bookmark, options: .withoutUI, bookmarkDataIsStale: &stale) { return url } }; return URL(fileURLWithPath: path) }
     var exists: Bool { FileManager.default.fileExists(atPath: url.path) }
+    /// Size (files only) and the enclosing folder, e.g. "2.4 MB · Downloads".
+    var detail: String {
+        let resolved = url, folder = resolved.deletingLastPathComponent().lastPathComponent
+        guard let values = try? resolved.resourceValues(forKeys: [.isDirectoryKey, .fileSizeKey]) else { return folder }
+        if values.isDirectory == true { return "Folder · \(folder)" }
+        return values.fileSize.map { "\(ByteCountFormatter.string(fromByteCount: Int64($0), countStyle: .file)) · \(folder)" } ?? folder
+    }
 }
 @MainActor final class TrayService: ObservableObject {
     @Published var items: [TrayItem] = []
